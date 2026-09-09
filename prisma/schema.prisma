@@ -3,8 +3,6 @@
 // se guardan separados a propósito. El token del registro es aleatorio y
 // nunca se guarda junto a la identidad, así no hay camino de vuelta.
 //
-// Cambiar a Postgres: provider = "postgresql" + DATABASE_URL en .env
-// (y en src/lib/db.ts usar @prisma/adapter-pg en vez de better-sqlite3).
 
 generator client {
   provider = "prisma-client"
@@ -12,7 +10,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 /// Datos identificables del profesional (onboarding). Bloqueados.

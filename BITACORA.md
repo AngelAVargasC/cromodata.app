@@ -33,6 +33,16 @@ Entrada más reciente arriba. Cada sesión: qué se hizo, qué se decidió, qué
   los `small` a 38 px. El último paso del recorrido dice «Ver la radiografía» para que
   no parta en tres líneas en móvil.
 
+- **Postgres en vez de SQLite** (Angel levantó el servicio Postgres en Railway):
+  `provider = "postgresql"`, adaptador `@prisma/adapter-pg`, se quitó `better-sqlite3`.
+  Migración inicial regenerada para Postgres con `prisma migrate diff --from-empty
+  --to-schema … --script` (no necesita conexión). `nixpacks.toml` sin gcc/python.
+  Variables en Railway: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `ROOM_BASELINE`,
+  `ADMIN_PASSWORD`. Ya no hace falta el volumen.
+- **Panel `/admin`** protegido por contraseña (`ADMIN_PASSWORD`): cookie HMAC de 12 h,
+  dos pestañas (onboarding profesional y salud anónima), contadores y descarga CSV
+  (`/api/admin/export?type=perfil|salud`). Código en `src/lib/admin.ts`, `src/app/admin/`.
+
 ### Qué se decidió
 
 - Angel pidió **mantener las formas** de los pasos 2 y 3 (blob y esferas). Se probó una
@@ -42,6 +52,10 @@ Entrada más reciente arriba. Cada sesión: qué se hizo, qué se decidió, qué
 
 ### Qué quedó abierto
 
+- **No se pudo probar contra Postgres en local**: el Postgres local de Angel (5433/5434)
+  tiene otra contraseña. Probar tras el deploy en Railway: `/api/aggregate`, un envío del
+  formulario y `/admin`. Para desarrollar en local, poner en `.env` la
+  `DATABASE_PUBLIC_URL` de Railway o las credenciales del Postgres local.
 - Confirmar que el deploy de Railway corresponde al último commit (pestaña Deployments).
 - Pendientes anteriores.
 

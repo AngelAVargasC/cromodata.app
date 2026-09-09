@@ -1,14 +1,13 @@
 import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 // Un solo cliente por proceso (Next recarga módulos en dev).
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function create() {
-  const url = process.env.DATABASE_URL ?? "file:./prisma/dev.db";
-  // Para Postgres: import { PrismaPg } from "@prisma/adapter-pg";
-  // const adapter = new PrismaPg({ connectionString: url });
-  const adapter = new PrismaBetterSqlite3({ url });
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new Error("Falta DATABASE_URL (Postgres). Revisa .env o las variables de Railway.");
+  const adapter = new PrismaPg({ connectionString });
   return new PrismaClient({ adapter });
 }
 

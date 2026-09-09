@@ -1,6 +1,9 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateTable
 CREATE TABLE "Participant" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "company" TEXT NOT NULL,
@@ -9,12 +12,14 @@ CREATE TABLE "Participant" (
     "level" TEXT NOT NULL,
     "decision" TEXT NOT NULL,
     "contact" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Participant_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "HealthRecord" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,
     "ageRange" TEXT NOT NULL,
     "conditions" TEXT NOT NULL,
@@ -26,8 +31,11 @@ CREATE TABLE "HealthRecord" (
     "health" TEXT NOT NULL,
     "tobacco" TEXT,
     "ultraprocessed" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "HealthRecord_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
 CREATE UNIQUE INDEX "HealthRecord_token_key" ON "HealthRecord"("token");
+

@@ -1,41 +1,41 @@
-# Subir a Railway
+# Subir a Railway (Postgres)
 
-La app corre en Railway con SQLite guardada en un **volumen** (si no, la base se borra en
-cada deploy). Cinco pasos:
+La app corre en Railway con el servicio **Postgres** del mismo proyecto. Ya no hace falta
+volumen: la base vive en Postgres.
 
-1. **Subir el repo a GitHub** (Angel hace el commit y el push).
+1. **Subir el repo a GitHub** (Angel hace el commit y el push). Railway despliega solo.
 
-2. **Crear el proyecto en Railway**: New Project → Deploy from GitHub repo → elegir
-   `cromoapp`. Railway detecta Node y usa `nixpacks.toml` + `railway.json` de este repo
-   (build `npm run build`, arranque `prisma migrate deploy && npm run start`).
-
-3. **Añadir un volumen**: en el servicio → pestaña *Volumes* → *Add volume* → mount path
-   `/data`.
-
-4. **Variables** (servicio → *Variables*):
+2. **Variables del servicio `cromodata.app`** (pestaña *Variables*):
 
    ```
-   DATABASE_URL=file:/data/cromodata.db
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
    ROOM_BASELINE=120
+   ADMIN_PASSWORD=<una clave larga>
    ```
 
-   `PORT` la pone Railway sola y Next la respeta. `ROOM_BASELINE=0` quita la sala simulada.
+   `${{Postgres.DATABASE_URL}}` es una referencia a la variable del servicio Postgres:
+   escríbela tal cual y Railway la resuelve. `PORT` la pone Railway y Next la respeta.
+   `ROOM_BASELINE=0` quita la sala simulada.
 
-5. **Dominio**: servicio → *Settings* → *Networking* → *Generate domain*. Esa URL es la que
-   se comparte por QR con los asistentes. Para ensayar: `https://<dominio>/?demo=1`.
+3. Al arrancar, `npx prisma migrate deploy` crea las tablas `Participant` y `HealthRecord`
+   (migración `prisma/migrations/20260909_init`). Healthcheck en `/api/aggregate`.
+
+4. **Dominio**: *Settings → Networking → Generate domain*. Esa URL va al QR.
+
+## Panel de respuestas
+
+`https://<dominio>/admin` pide la contraseña de `ADMIN_PASSWORD` y muestra dos pestañas:
+onboarding profesional (nombre, correo, organización, sector, área, nivel, decisión,
+contacto) y respuestas de salud anónimas (por token). Botón «Descargar CSV» en cada una.
+La sesión dura 12 horas; cambiar la contraseña en Railway cierra todas las sesiones.
+
+## Desarrollo local
+
+En `.env` pon `DATABASE_URL` apuntando a tu Postgres local o a la `DATABASE_PUBLIC_URL`
+del Postgres de Railway (pestaña *Variables* del servicio Postgres), y `ADMIN_PASSWORD`.
+Después: `npx prisma migrate deploy` y `npm run dev`.
 
 ## Comprobar
 
-- `https://<dominio>/api/aggregate` debe devolver JSON (es el healthcheck).
-- Rellenar el formulario desde un móvil y ver que `nReal` sube en ese JSON.
-
-## Alternativa con Postgres
-
-Si más adelante se quiere Postgres: añadir el plugin Postgres en Railway, cambiar
-`provider = "postgresql"` en `prisma/schema.prisma`, usar `@prisma/adapter-pg` en
-`src/lib/db.ts`, borrar `prisma/migrations` y correr `npx prisma migrate dev --name init`
-contra esa base. El volumen deja de hacer falta.
-
-## Redeploy
-
-Cada push a la rama conectada vuelve a desplegar. La base en el volumen se conserva.
+- `https://<dominio>/api/aggregate` devuelve JSON con `nReal` (respuestas reales).
+- Rellenar el formulario desde un móvil y ver que aparece en `/admin`.

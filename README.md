@@ -8,7 +8,7 @@ cómo sus datos pasan de identificarle a ser un registro anónimo que solo exist
 
 ```bash
 npm install          # instala y genera el cliente Prisma
-npx prisma migrate dev   # crea prisma/dev.db (solo la primera vez)
+npx prisma migrate deploy   # crea las tablas en tu Postgres (DATABASE_URL en .env)
 npm run dev          # http://localhost:3000
 ```
 
@@ -17,21 +17,23 @@ Atajos útiles:
 - `http://localhost:3000/?demo=1` salta el formulario y entra directo al recorrido (para ensayar).
 - Flechas ← → o barra espaciadora avanzan el recorrido; el botón «Auto» avanza solo cada 7,5 s.
 - `GET /api/aggregate` devuelve la radiografía de la sala en JSON.
-- `npm run db:studio` abre Prisma Studio para ver las tablas.
+- `/admin` (con `ADMIN_PASSWORD`) muestra las respuestas; `npm run db:studio` abre Prisma Studio.
 
 Para que los asistentes entren desde sus móviles en la misma red: `npm run dev -- -H 0.0.0.0` y compartir la IP local (Next la imprime como «Network»).
 
 ## Base de datos
 
-SQLite vía Prisma, en `prisma/dev.db`. Dos tablas **sin relación entre sí**:
+Postgres vía Prisma. Dos tablas **sin relación entre sí**:
 
 - `Participant`: nombre, correo, organización y perfil profesional (bloqueados).
 - `HealthRecord`: respuestas de salud con un token aleatorio (visibles solo agregadas).
 
-Cambiar a Postgres: en `prisma/schema.prisma` poner `provider = "postgresql"`, en `.env` la URL de conexión,
-en `src/lib/db.ts` usar `@prisma/adapter-pg`, y correr `npx prisma migrate dev`.
+`DATABASE_URL` en `.env` (local) o en las variables de Railway. `npx prisma migrate deploy`
+crea las tablas. `ROOM_BASELINE=0` quita las 120 personas simuladas que rellenan la sala.
 
-`ROOM_BASELINE=0` en `.env` quita las 120 personas simuladas que rellenan la sala por defecto.
+## Panel de respuestas
+
+`/admin` pide la contraseña de `ADMIN_PASSWORD` y muestra las dos tablas con descarga CSV.
 
 ## Estructura
 
