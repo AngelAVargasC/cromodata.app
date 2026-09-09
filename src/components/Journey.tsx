@@ -36,7 +36,26 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
   const [i, setI] = useState(0);
   const [auto, setAuto] = useState(false);
   const tags = useRef<Record<string, HTMLDivElement | null>>({});
+  const journey = useRef<HTMLDivElement>(null);
   const step = steps[i];
+
+  useEffect(() => {
+    const root = journey.current;
+    const head = root?.querySelector<HTMLElement>(".head");
+    const caption = root?.querySelector<HTMLElement>(".caption");
+    if (!root || !head || !caption) return;
+    const updateFrame = () => {
+      const rect = root.getBoundingClientRect();
+      state.current.bustFrame = {
+        top: head.getBoundingClientRect().bottom - rect.top + 18,
+        bottom: rect.width >= 900 ? rect.height - 80 : caption.getBoundingClientRect().top - rect.top - 18,
+      };
+    };
+    const observer = new ResizeObserver(updateFrame);
+    observer.observe(root); observer.observe(head); observer.observe(caption);
+    updateFrame();
+    return () => { observer.disconnect(); delete state.current.bustFrame; };
+  }, [state, i]);
 
   useEffect(() => {
     const st = state.current;
@@ -91,7 +110,7 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
   );
 
   return (
-    <div className="journey">
+    <div className="journey" ref={journey}>
       <div className="head">
         <div className="row"><Logo /><span className="step">{i + 1} / {steps.length}</span></div>
         <div className="stages" aria-label="Etapas">

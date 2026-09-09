@@ -54,7 +54,7 @@ export interface ParticleData {
  * (perfil, visto de lado, y frontal). Se muestrea en una retícula regular y se conservan
  * las celdas de la superficie, así se ve como el busto punteado del deck desde cualquier ángulo.
  */
-const MW = 120, MH = 180, PX = 68; // px de máscara por unidad de mundo
+const MW = 132, MH = 180, PX = 68; // px de máscara por unidad de mundo
 function mask(draw: (g: CanvasRenderingContext2D) => void): Uint8Array | null {
   if (typeof document === "undefined") return null;
   const c = document.createElement("canvas"); c.width = MW; c.height = MH;
@@ -65,37 +65,50 @@ function mask(draw: (g: CanvasRenderingContext2D) => void): Uint8Array | null {
   for (let i = 0; i < MW * MH; i++) m[i] = d[i * 4 + 3] > 128 ? 1 : 0;
   return m;
 }
-// Perfil (cara hacia la derecha): frente, nariz, labios, mentón, cuello y hombros.
+// Contorno trazado sobre la referencia (480 × 643). Se refleja para que la cámara
+// a -π/2 presente la cara hacia la izquierda, y se escala sin alterar proporciones.
 const PROFILE = mask((g) => {
+  g.translate(146, -5.44);
+  g.scale(-0.32, 0.32);
   g.beginPath();
-  g.moveTo(60, 8);                                   // coronilla
-  g.bezierCurveTo(34, 8, 20, 30, 22, 58);            // cráneo, atrás
-  g.bezierCurveTo(23, 82, 30, 102, 48, 114);         // nuca
-  g.lineTo(52, 136);                                 // cuello, atrás
-  g.bezierCurveTo(36, 142, 12, 150, 8, 180);         // hombro, atrás
-  g.lineTo(116, 180);                                // base
-  g.bezierCurveTo(114, 150, 96, 142, 84, 136);       // hombro, delante
-  g.lineTo(86, 122);                                 // cuello, delante
-  g.quadraticCurveTo(100, 118, 101, 108);            // mentón redondeado
-  g.quadraticCurveTo(104, 103, 101, 98);             // labio inferior
-  g.quadraticCurveTo(105, 94, 101, 90);              // labio superior
-  g.quadraticCurveTo(112, 84, 108, 76);              // nariz pequeña y redonda
-  g.quadraticCurveTo(102, 70, 103, 62);              // puente
-  g.bezierCurveTo(108, 45, 96, 8, 60, 8);            // frente
+  g.moveTo(224, 42);
+  g.bezierCurveTo(318, 40, 372, 72, 377, 147);       // cráneo ancho
+  g.bezierCurveTo(382, 202, 370, 252, 332, 280);     // occipital y nuca
+  g.bezierCurveTo(328, 300, 328, 324, 333, 342);
+  g.quadraticCurveTo(354, 354, 354, 383);
+  g.bezierCurveTo(359, 403, 391, 419, 406, 451);     // hombro posterior
+  g.bezierCurveTo(422, 481, 435, 521, 439, 555);
+  g.quadraticCurveTo(394, 568, 337, 578);
+  g.lineTo(111, 578);
+  g.bezierCurveTo(107, 558, 111, 534, 123, 510);     // pecho
+  g.bezierCurveTo(136, 479, 156, 450, 181, 431);
+  g.quadraticCurveTo(195, 421, 195, 402);
+  g.lineTo(195, 373);                               // cuello anterior
+  g.quadraticCurveTo(195, 355, 178, 353);
+  g.lineTo(115, 353);                               // mandíbula casi horizontal
+  g.quadraticCurveTo(96, 352, 99, 332);              // mentón
+  g.quadraticCurveTo(101, 316, 96, 306);
+  g.quadraticCurveTo(91, 296, 99, 286);              // labios
+  g.quadraticCurveTo(103, 277, 93, 270);
+  g.quadraticCurveTo(70, 264, 74, 250);              // punta de nariz
+  g.quadraticCurveTo(77, 238, 90, 223);
+  g.quadraticCurveTo(96, 211, 91, 192);              // puente y frente
+  g.bezierCurveTo(82, 165, 86, 138, 97, 112);
+  g.bezierCurveTo(108, 70, 157, 42, 224, 42);
   g.closePath(); g.fill();
 });
 // Frontal: cabeza ovalada, cuello y hombros.
 const FRONT = mask((g) => {
-  g.beginPath(); g.ellipse(60, 62, 38, 54, 0, 0, Math.PI * 2); g.fill();
-  g.fillRect(42, 100, 36, 40);
+  g.beginPath(); g.ellipse(66, 58, 38, 50, 0, 0, Math.PI * 2); g.fill();
+  g.fillRect(47, 94, 38, 42);
   g.beginPath(); g.moveTo(6, 180); g.lineTo(6, 168);
-  g.bezierCurveTo(8, 148, 30, 142, 42, 136); g.lineTo(78, 136);
-  g.bezierCurveTo(90, 142, 112, 148, 114, 168); g.lineTo(114, 180); g.closePath(); g.fill();
+  g.bezierCurveTo(8, 148, 35, 139, 47, 130); g.lineTo(85, 130);
+  g.bezierCurveTo(97, 139, 124, 148, 126, 168); g.lineTo(126, 180); g.closePath(); g.fill();
 });
 function insideBust(x: number, y: number, z: number): boolean {
   if (!PROFILE || !FRONT) return false;
   const py = Math.round(98 - y * PX);
-  const pz = Math.round(60 + z * PX), px = Math.round(60 + x * PX);
+  const pz = Math.round(MW / 2 + z * PX), px = Math.round(MW / 2 + x * PX);
   if (py < 0 || py >= MH || pz < 0 || pz >= MW || px < 0 || px >= MW) return false;
   return PROFILE[py * MW + pz] === 1 && FRONT[py * MW + px] === 1;
 }
@@ -119,7 +132,8 @@ export let BUST_STEP = 0.07;
  */
 const BUST_CELLS: Cell[] = (() => {
   if (!PROFILE) return [];
-  let st = 0.05, res = sampleBust(st);
+  // Aproximadamente 46 filas, como en la referencia; aumentar solo si no cabe.
+  let st = 0.056, res = sampleBust(st);
   while (res.shell.length > N && st < 0.2) { st += 0.003; res = sampleBust(st); }
   BUST_STEP = st;
   // Orden determinista mezclado: las repeticiones (i % n) se reparten por todo el cuerpo.

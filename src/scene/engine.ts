@@ -13,6 +13,8 @@ export interface SceneState {
   lockAngle: number | null;
   /** Balanceo suave alrededor del ángulo fijo, para que se lea el volumen. */
   sway: boolean;
+  /** Franja visible para el busto, en píxeles CSS, entre tarjetas y pie. */
+  bustFrame?: { top: number; bottom: number };
   labels: { el: HTMLElement | null; pos: Vec3 }[];
 }
 
@@ -41,6 +43,7 @@ function mul(a: M4, b: M4): M4 {
 function rotY(t: number): M4 { const o = m4(), c = Math.cos(t), s = Math.sin(t); o[0] = c; o[2] = -s; o[5] = 1; o[8] = s; o[10] = c; o[15] = 1; return o; }
 function rotX(t: number): M4 { const o = m4(), c = Math.cos(t), s = Math.sin(t); o[0] = 1; o[5] = c; o[6] = s; o[9] = -s; o[10] = c; o[15] = 1; return o; }
 function translate(x: number, y: number, z: number): M4 { const o = m4(); o[0] = o[5] = o[10] = o[15] = 1; o[12] = x; o[13] = y; o[14] = z; return o; }
+function scale(s: number): M4 { const o = m4(); o[0] = o[5] = o[10] = s; o[15] = 1; return o; }
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string) {
   const sh = gl.createShader(type)!;
@@ -253,8 +256,18 @@ export class Engine {
       this.tilt += (tiltTarget - this.tilt) * ease(0.5);
     }
     const tilt = this.tilt;
-    const yOff = -0.12 + 0.11 * this.viewH * this.portrait; // en retrato la escena sube para dejar sitio al texto
-    const view = mul(translate(0, yOff, -this.dist), mul(rotX(tilt), rotY(this.angle)));
+    let yOff = -0.12 + 0.11 * this.viewH * this.portrait;
+    let modelScale = 1;
+    const bustWeight = Math.max(0, 1 - Math.abs(this.stageCur - 1));
+    if (st.bustFrame && bustWeight > 0) {
+      const h = this.canvas.height / this.dpr;
+      const { top, bottom } = st.bustFrame;
+      const fit = Math.min(1, Math.max(0.1, (bottom - top) / h * this.viewH / 2.65));
+      const center = (0.5 - (top + bottom) / (2 * h)) * this.viewH;
+      modelScale += (fit - 1) * bustWeight;
+      yOff += (center - 0.16 * fit - yOff) * bustWeight;
+    }
+    const view = mul(translate(0, yOff, -this.dist), mul(scale(modelScale), mul(rotX(tilt), rotY(this.angle))));
     this.vp = mul(this.proj, view);
 
     const gl = this.gl;
@@ -278,7 +291,7 @@ export class Engine {
     gl.uniform1f(this.U.u_time, t);
     gl.uniform1f(this.U.u_size, 4.8 * this.dpr * (1 - 0.3 * this.portrait));
     // Punto del busto: 78 % del paso de la retícula, en píxeles de dispositivo
-    gl.uniform1f(this.U.u_bustSize, 0.78 * BUST_STEP * (this.canvas.height / this.viewH));
+    gl.uniform1f(this.U.u_bustSize, 0.78 * BUST_STEP * modelScale * (this.canvas.height / this.viewH));
     gl.uniform1f(this.U.u_progress, this.progressCur);
     gl.uniform1f(this.U.u_dim, this.dimCur);
     gl.bindVertexArray(this.vao);
