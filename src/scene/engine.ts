@@ -1,0 +1,303 @@
+import { buildParticles, fillBars, N, LAYOUTS, BUST_STEP, type ParticleData } from "./particles";
+import { PARTICLE_VS, PARTICLE_FS, BG_VS, BG_FS } from "./shaders";
+
+export type Vec3 = [number, number, number];
+
+/** Estado mutable que la UI escribe y el bucle lee. Nunca estado de React aquí. */
+export interface SceneState {
+  stage: number;       // destino 0..5
+  progress: number;    // 0..1 partículas encendidas
+  dim: number;         // 0..1 atenuación global
+  glow: number;        // degradados animados del fondo
+  /** Ángulo fijo de cámara (rad) o null para rotación libre. */
+  lockAngle: number | null;
+  /** Balanceo suave alrededor del ángulo fijo, para que se lea el volumen. */
+  sway: boolean;
+  labels: { el: HTMLElement | null; pos: Vec3 }[];
+}
+
+const ORANGE: Vec3 = [0.95, 0.42, 0.13];
+const INK: Vec3 = [0.1, 0.09, 0.09];
+const CATS: Vec3[] = [
+  [0.95, 0.42, 0.13], [0.1, 0.09, 0.09], [1.0, 0.6, 0.28],
+  [0.45, 0.42, 0.4], [0.85, 0.3, 0.08], [0.25, 0.22, 0.2],
+];
+
+// ---------- mat4 mínimo (column-major) ----------
+type M4 = Float32Array;
+const m4 = () => new Float32Array(16);
+function ortho(w: number, h: number, near: number, far: number): M4 {
+  const o = m4();
+  o[0] = 1 / w; o[5] = 1 / h; o[10] = -2 / (far - near); o[14] = -(far + near) / (far - near); o[15] = 1;
+  return o;
+}
+function mul(a: M4, b: M4): M4 {
+  const o = m4();
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+    o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+  }
+  return o;
+}
+function rotY(t: number): M4 { const o = m4(), c = Math.cos(t), s = Math.sin(t); o[0] = c; o[2] = -s; o[5] = 1; o[8] = s; o[10] = c; o[15] = 1; return o; }
+function rotX(t: number): M4 { const o = m4(), c = Math.cos(t), s = Math.sin(t); o[0] = 1; o[5] = c; o[6] = s; o[9] = -s; o[10] = c; o[15] = 1; return o; }
+function translate(x: number, y: number, z: number): M4 { const o = m4(); o[0] = o[5] = o[10] = o[15] = 1; o[12] = x; o[13] = y; o[14] = z; return o; }
+
+function compile(gl: WebGL2RenderingContext, type: number, src: string) {
+  const sh = gl.createShader(type)!;
+  gl.shaderSource(sh, src); gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    console.error("[scene] shader:", gl.getShaderInfoLog(sh));
+  }
+  return sh;
+}
+function program(gl: WebGL2RenderingContext, vs: string, fs: string) {
+  const p = gl.createProgram()!;
+  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) console.error("[scene] link:", gl.getProgramInfoLog(p));
+  return p;
+}
+
+export class Engine {
+  private gl: WebGL2RenderingContext;
+  private canvas: HTMLCanvasElement;
+  private data: ParticleData;
+  private posBuf!: WebGLBuffer;
+  private prog!: WebGLProgram;
+  private bg!: WebGLProgram;
+  private vao!: WebGLVertexArrayObject;
+  private U: Record<string, WebGLUniformLocation | null> = {};
+  private UB: Record<string, WebGLUniformLocation | null> = {};
+  private raf = 0;
+  private last = 0;
+  private t0 = performance.now();
+  private stageCur = 0;
+  private tween: { from: number; to: number; start: number; dur: number } | null = null;
+  private angle = 0;
+  private dragVel = 0;
+  private dpr = 1;
+  private vp: M4 = m4();
+  private dist = 6;
+  private ro: ResizeObserver;
+  private lost = false;
+  private progressCur = 1;
+  private dimCur = 1;
+  private glowCur = 1;
+  private tilt = 0.22;
+
+  constructor(private host: HTMLElement, private state: SceneState) {
+    const canvas = document.createElement("canvas");
+    canvas.className = "scene-canvas";
+    host.appendChild(canvas);
+    this.canvas = canvas;
+    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: true, powerPreference: "high-performance" });
+    if (!gl) throw new Error("WebGL2 no disponible");
+    this.gl = gl;
+    this.data = buildParticles();
+    this.stageCur = state.stage;
+    this.setup();
+    this.ro = new ResizeObserver(() => this.resize());
+    this.ro.observe(host);
+    this.resize();
+    canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); this.lost = true; });
+    canvas.addEventListener("webglcontextrestored", () => { this.setup(); this.lost = false; });
+    this.bindDrag();
+    this.raf = requestAnimationFrame(this.frame);
+  }
+
+  private setup() {
+    const gl = this.gl;
+    this.prog = program(gl, PARTICLE_VS, PARTICLE_FS);
+    this.bg = program(gl, BG_VS, BG_FS);
+    for (const n of ["u_vp", "u_stage", "u_time", "u_size", "u_bustSize", "u_progress", "u_dim", "u_orange", "u_ink", "u_cat"]) {
+      this.U[n] = gl.getUniformLocation(this.prog, n);
+    }
+    for (const n of ["u_res", "u_time", "u_glow"]) this.UB[n] = gl.getUniformLocation(this.bg, n);
+
+    this.vao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.vao);
+    this.posBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, this.data.pos, gl.STATIC_DRAW);
+    const stride = LAYOUTS * 3 * 4;
+    for (let L = 0; L < LAYOUTS; L++) {
+      const loc = gl.getAttribLocation(this.prog, `a_p${L}`);
+      if (loc < 0) continue;
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, stride, L * 12);
+    }
+    const metaBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, metaBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, this.data.meta, gl.STATIC_DRAW);
+    const ml = gl.getAttribLocation(this.prog, "a_meta");
+    gl.enableVertexAttribArray(ml);
+    gl.vertexAttribPointer(ml, 4, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+
+    gl.useProgram(this.prog);
+    gl.uniform3fv(this.U.u_orange, ORANGE);
+    gl.uniform3fv(this.U.u_ink, INK);
+    gl.uniform3fv(this.U.u_cat, CATS.flat());
+  }
+
+  /** Reconstruye la pose de barras con los porcentajes de la sala (una subida, no por frame). */
+  setBars(pcts: number[]) {
+    fillBars(this.data, pcts);
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, this.data.pos, gl.STATIC_DRAW);
+  }
+
+  /** Va a una etapa con una transición lineal (el escalonado lo pone el shader). */
+  goTo(stage: number, dur = 1.9) {
+    if (stage === this.stageCur && !this.tween) return;
+    this.tween = { from: this.stageCur, to: stage, start: performance.now(), dur: dur * 1000 };
+  }
+
+  private resize() {
+    const r = this.host.getBoundingClientRect();
+    const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.canvas.width = Math.round(w * this.dpr);
+    this.canvas.height = Math.round(h * this.dpr);
+    this.canvas.style.width = w + "px";
+    this.canvas.style.height = h + "px";
+    const aspect = w / h;
+    // Que quepan ±2.4 en x y ±1.9 en y con fov 40°.
+    // Proyección ortográfica: la retícula del busto se lee como puntos desde cualquier
+    // ángulo y, de perfil, las caras delantera y trasera coinciden exactamente.
+    const halfH = Math.max(1.9, 2.1 / aspect) * 1.02;
+    this.dist = 20;
+    this.portrait = Math.max(0, Math.min(1, (1.05 - aspect) / 0.55));
+    this.viewH = 2 * halfH; // alto visible en unidades de mundo
+    this.proj = ortho(halfH * aspect, halfH, 0.1, 60);
+  }
+  private proj: M4 = m4();
+  private portrait = 0;
+  private viewH = 4;
+
+  /** Instante hasta el que manda el usuario (después de arrastrar, la cámara no vuelve sola). */
+  private userUntil = 0;
+  private bindDrag() {
+    let dragging = false, lastX = 0, lastY = 0;
+    window.addEventListener("pointerdown", (e) => {
+      const t = e.target as Element | null;
+      if (t && t.closest("button, input, a, .form, .results, .opt")) return;
+      dragging = true; lastX = e.clientX; lastY = e.clientY; this.dragVel = 0;
+    });
+    window.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX, dy = e.clientY - lastY; lastX = e.clientX; lastY = e.clientY;
+      this.angle += dx * 0.008; this.dragVel = dx * 0.008;
+      this.tilt = Math.max(-1.3, Math.min(1.3, this.tilt + dy * 0.006));
+      this.userUntil = performance.now() + 6000;
+    });
+    window.addEventListener("pointerup", () => { dragging = false; });
+    window.addEventListener("pointercancel", () => { dragging = false; });
+  }
+
+  /** Proyecta un punto del mundo a píxeles CSS del host. */
+  project(p: Vec3): [number, number, boolean] {
+    const m = this.vp;
+    const x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
+    const y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
+    const w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+    const W = this.canvas.width / this.dpr, H = this.canvas.height / this.dpr;
+    return [((x / w) * 0.5 + 0.5) * W, (0.5 - (y / w) * 0.5) * H, w > 0];
+  }
+
+  private errors = 0;
+  private frame = (now: number) => {
+    this.raf = requestAnimationFrame(this.frame);
+    if (this.lost) return;
+    try { this.tick(now); } catch (e) { if (this.errors++ < 3) console.error("[scene] frame:", e); }
+  };
+
+  debug() { return { stage: this.state.stage, stageCur: this.stageCur, tween: this.tween, dist: this.dist, portrait: this.portrait, angle: this.angle, errors: this.errors }; }
+
+  private tick(now: number) {
+    const dt = Math.min(0.05, (now - this.last) / 1000 || 0.016);
+    this.last = now;
+    const t = (now - this.t0) / 1000;
+    const st = this.state;
+
+    // Etapa (tween lineal; el suavizado va por partícula en el shader)
+    if (st.stage !== (this.tween ? this.tween.to : this.stageCur)) this.goTo(st.stage);
+    if (this.tween) {
+      const k = Math.min(1, (now - this.tween.start) / this.tween.dur);
+      this.stageCur = this.tween.from + (this.tween.to - this.tween.from) * k;
+      if (k >= 1) this.tween = null;
+    }
+    // Amortiguación por tiempo, no por frame
+    const ease = (tau: number) => 1 - Math.exp(-dt / tau);
+    this.progressCur += (st.progress - this.progressCur) * ease(0.35);
+    this.dimCur += (st.dim - this.dimCur) * ease(0.5);
+    this.glowCur += (st.glow - this.glowCur) * ease(0.8);
+
+    // Rotación: automática, salvo en barras (se encara a cámara)
+    const userDriving = now < this.userUntil;
+    if (userDriving) {
+      this.angle += this.dragVel; // inercia tras soltar el dedo
+    } else if (st.lockAngle !== null) {
+      const base = st.lockAngle;
+      // Equivalente más cercano al ángulo actual, para no dar la vuelta larga.
+      const target = base + Math.round((this.angle - base) / (Math.PI * 2)) * Math.PI * 2;
+      this.angle += (target - this.angle) * ease(0.4);
+    } else {
+      this.angle += 0.12 * dt + this.dragVel;
+    }
+    this.dragVel *= Math.exp(-dt / 0.2);
+    if (!userDriving) {
+      const tiltTarget = st.lockAngle !== null ? 0.0 : 0.22;
+      this.tilt += (tiltTarget - this.tilt) * ease(0.5);
+    }
+    const tilt = this.tilt;
+    const yOff = -0.12 + 0.11 * this.viewH * this.portrait; // en retrato la escena sube para dejar sitio al texto
+    const view = mul(translate(0, yOff, -this.dist), mul(rotX(tilt), rotY(this.angle)));
+    this.vp = mul(this.proj, view);
+
+    const gl = this.gl;
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    gl.useProgram(this.bg);
+    gl.uniform2f(this.UB.u_res, this.canvas.width, this.canvas.height);
+    gl.uniform1f(this.UB.u_time, t);
+    gl.uniform1f(this.UB.u_glow, this.glowCur);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(this.prog);
+    gl.uniformMatrix4fv(this.U.u_vp, false, this.vp);
+    gl.uniform1f(this.U.u_stage, this.stageCur);
+    gl.uniform1f(this.U.u_time, t);
+    gl.uniform1f(this.U.u_size, 4.8 * this.dpr * (1 - 0.3 * this.portrait));
+    // Punto del busto: 78 % del paso de la retícula, en píxeles de dispositivo
+    gl.uniform1f(this.U.u_bustSize, 0.78 * BUST_STEP * (this.canvas.height / this.viewH));
+    gl.uniform1f(this.U.u_progress, this.progressCur);
+    gl.uniform1f(this.U.u_dim, this.dimCur);
+    gl.bindVertexArray(this.vao);
+    gl.drawArrays(gl.POINTS, 0, N);
+    gl.bindVertexArray(null);
+
+    // Etiquetas HTML ancladas a puntos del mundo
+    for (const l of st.labels) {
+      if (!l.el) continue;
+      const [x, y, ok] = this.project(l.pos);
+      l.el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      l.el.style.opacity = ok ? "" : "0";
+    }
+  }
+
+  destroy() {
+    cancelAnimationFrame(this.raf);
+    this.ro.disconnect();
+    this.gl.getExtension("WEBGL_lose_context")?.loseContext();
+    this.canvas.remove();
+  }
+}

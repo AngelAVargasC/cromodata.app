@@ -1,0 +1,12 @@
+# Railway / Nixpacks. Node 22 LTS y herramientas para compilar better-sqlite3 si no hay binario.
+[phases.setup]
+nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npx prisma migrate deploy && npm run start"

@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cromodata · Mapa de salud
 
-## Getting Started
+Web app para la dinámica «¿Podemos convertir esta sala en un mapa de salud en tres minutos?».
+Cada asistente responde un formulario en su móvil y después ve, con una animación WebGL guiada,
+cómo sus datos pasan de identificarle a ser un registro anónimo que solo existe como estadística de la sala.
 
-First, run the development server:
+## Arrancar
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install          # instala y genera el cliente Prisma
+npx prisma migrate dev   # crea prisma/dev.db (solo la primera vez)
+npm run dev          # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Atajos útiles:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `http://localhost:3000/?demo=1` salta el formulario y entra directo al recorrido (para ensayar).
+- Flechas ← → o barra espaciadora avanzan el recorrido; el botón «Auto» avanza solo cada 7,5 s.
+- `GET /api/aggregate` devuelve la radiografía de la sala en JSON.
+- `npm run db:studio` abre Prisma Studio para ver las tablas.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Para que los asistentes entren desde sus móviles en la misma red: `npm run dev -- -H 0.0.0.0` y compartir la IP local (Next la imprime como «Network»).
 
-## Learn More
+## Base de datos
 
-To learn more about Next.js, take a look at the following resources:
+SQLite vía Prisma, en `prisma/dev.db`. Dos tablas **sin relación entre sí**:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `Participant`: nombre, correo, organización y perfil profesional (bloqueados).
+- `HealthRecord`: respuestas de salud con un token aleatorio (visibles solo agregadas).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Cambiar a Postgres: en `prisma/schema.prisma` poner `provider = "postgresql"`, en `.env` la URL de conexión,
+en `src/lib/db.ts` usar `@prisma/adapter-pg`, y correr `npx prisma migrate dev`.
 
-## Deploy on Vercel
+`ROOM_BASELINE=0` en `.env` quita las 120 personas simuladas que rellenan la sala por defecto.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Estructura
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/app/page.tsx` — fases: intro → formulario → recorrido → resultados.
+- `src/components/` — `Intro`, `Form`, `Journey`, `Results`, `Scene`.
+- `src/scene/` — motor WebGL2 a mano: `particles.ts` (poses), `shaders.ts`, `engine.ts`.
+- `src/lib/` — `questions.ts` (formulario oficial), `signals.ts` (señales y agregación), `simulation.ts`, `room.ts`, `db.ts`.
+- `docs/` — los PDF de contexto de Cromodata.
+- `BITACORA.md` — qué se hizo, qué se decidió y qué quedó abierto en cada sesión.

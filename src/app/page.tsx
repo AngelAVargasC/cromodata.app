@@ -1,69 +1,76 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+import { useEffect, useRef, useState } from "react";
+import Scene, { useSceneState, type EngineRef } from "@/components/Scene";
+import Intro from "@/components/Intro";
+import Form from "@/components/Form";
+import Journey from "@/components/Journey";
+import Results from "@/components/Results";
+import { splitAnswers, type Answers, type OnboardingData } from "@/lib/questions";
+import type { Aggregate } from "@/lib/signals";
+import type { Engine } from "@/scene/engine";
 
-export default function Home() {
+type Phase = "intro" | "form" | "sending" | "journey" | "results";
+
+const DEMO: OnboardingData = {
+  name: "Keila Barral", email: "keila@cromodata.com", company: "Cromodata", sector: "Healthtech o tecnología",
+  area: "Dirección general", level: "Dirección general o C-Level", decision: "Tomo la decisión final", contact: "Sí, quiero conversar con el equipo",
+};
+
+export default function Page() {
+  const state = useSceneState();
+  const engineRef: EngineRef = useRef<Engine | null>(null);
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [onboarding, setOnboarding] = useState<OnboardingData>(DEMO);
+  const [token, setToken] = useState("CD-demo");
+  const [agg, setAgg] = useState<Aggregate | null>(null);
+  const [error, setError] = useState("");
+
+  // ?demo=1 salta el formulario y va directo al recorrido (para ensayar la presentación).
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("demo")) {
+      fetch("/api/aggregate").then((r) => r.json()).then((a: Aggregate) => {
+        setAgg(a); setToken("CD-" + Math.random().toString(16).slice(2, 14)); setPhase("journey");
+      });
+    }
+  }, []);
+
+  async function submit(a: Answers) {
+    setPhase("sending"); setError("");
+    const body = splitAnswers(a);
+    setOnboarding(body.onboarding);
+    try {
+      const r = await fetch("/api/responses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      setToken(j.token); setAgg(j.aggregate); setPhase("journey");
+    } catch (e) {
+      console.error(e);
+      // Sin base de datos disponible, el recorrido sigue con la sala simulada.
+      const a2 = await fetch("/api/aggregate").then((r) => r.json()).catch(() => null);
+      if (a2) { setAgg(a2); setToken("CD-" + Math.random().toString(16).slice(2, 14)); setPhase("journey"); }
+      else { setError("No se pudo guardar la respuesta. Revisa la base de datos e inténtalo de nuevo."); setPhase("form"); }
+    }
+  }
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="app">
+      <Scene state={state} engineRef={engineRef} />
+      <div className="ui">
+        {phase === "intro" && <Intro state={state} onStart={() => setPhase("form")} />}
+        {(phase === "form" || phase === "sending") && (
+          <>
+            <Form state={state} onDone={submit} onBack={() => setPhase("intro")} />
+            {phase === "sending" && <div className="sheet"><div className="notice"><h2>Protegiendo identidad…</h2></div></div>}
+            {error && <div className="sheet" onClick={() => setError("")}><div className="notice"><p className="err">{error}</p></div></div>}
+          </>
+        )}
+        {phase === "journey" && agg && (
+          <Journey state={state} engineRef={engineRef} onboarding={onboarding} token={token} aggregate={agg} onFinish={() => setPhase("results")} />
+        )}
+        {phase === "results" && agg && (
+          <Results aggregate={agg} onRestart={() => { setAgg(null); setPhase("intro"); }} />
+        )}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,47 @@
+// Cromodata · Mapa de salud
+// Dos tablas SIN llave entre ellas: la identidad y el registro de salud
+// se guardan separados a propósito. El token del registro es aleatorio y
+// nunca se guarda junto a la identidad, así no hay camino de vuelta.
+//
+// Cambiar a Postgres: provider = "postgresql" + DATABASE_URL en .env
+// (y en src/lib/db.ts usar @prisma/adapter-pg en vez de better-sqlite3).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// Datos identificables del profesional (onboarding). Bloqueados.
+model Participant {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  company   String
+  sector    String
+  area      String
+  level     String
+  decision  String
+  contact   String
+  createdAt DateTime @default(now())
+}
+
+/// Registro de salud anonimizado. Visible solo de forma agregada.
+model HealthRecord {
+  id             String   @id @default(cuid())
+  token          String   @unique
+  ageRange       String
+  conditions     String   // JSON: string[]
+  familyHistory  String   // JSON: string[]
+  activity       String
+  sleep          String
+  checkup        String
+  stress         String
+  health         String
+  tobacco        String?
+  ultraprocessed String?
+  createdAt      DateTime @default(now())
+}
