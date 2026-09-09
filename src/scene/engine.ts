@@ -14,6 +14,7 @@ export interface SceneState {
   /** Balanceo suave alrededor del ángulo fijo, para que se lea el volumen. */
   sway: boolean;
   motionPaused?: boolean;
+  healthIcons?: (HTMLElement | null)[];
   /** Franja visible para el busto, en píxeles CSS, entre tarjetas y pie. */
   bustFrame?: { top: number; bottom: number };
   labels: { el: HTMLElement | null; pos: Vec3 }[];
@@ -355,6 +356,25 @@ export class Engine {
       gl.drawArrays(gl.TRIANGLES, 0, this.bustCount);
       gl.depthMask(true);
       gl.bindVertexArray(null);
+    }
+
+    // Iconos clínicos alrededor del busto; se fragmentan y entran en la nube al anonimizar.
+    const morph = Math.max(0, Math.min(1, (this.stageCur - 1) / 0.85));
+    const gather = morph * morph * (3 - 2 * morph);
+    const orbitView = mul(this.proj, mul(translate(0, yOff, -this.dist), mul(scale(modelScale), mul(rotX(tilt * 0.3), rotY((this.angle + Math.PI / 2) * 0.25)))));
+    for (let k = 0; k < (st.healthIcons?.length ?? 0); k++) {
+      const el = st.healthIcons![k];
+      if (!el) continue;
+      const visible = this.stageCur >= 0.8 && this.stageCur < 1.85;
+      el.style.visibility = visible ? "visible" : "hidden";
+      if (!visible) continue;
+      const a = k * Math.PI / 3 + 0.2 + 0.07 * Math.sin(t * 0.5);
+      const radius = 1 - gather * 0.88;
+      const p: Vec3 = [Math.cos(a) * 1.65 * radius, (Math.sin(a) * 1.13 + 0.16) * radius, Math.sin(a * 2 + t * 0.3) * 0.25 * radius];
+      const [x, y] = this.project(p, orbitView);
+      el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${1 - gather * 0.65})`;
+      el.style.opacity = String(Math.min(1, (this.stageCur - 0.8) / 0.2) * (1 - Math.pow(morph, 4)));
+      el.style.setProperty("--morph", String(Math.min(1, morph * 3)));
     }
 
     // Los datos comparten la transformación del modelo: posición, giro e inclinación.

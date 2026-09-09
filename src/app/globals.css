@@ -141,24 +141,28 @@ button { cursor: pointer; }
 .journey { position: absolute; inset: 0; display: flex; flex-direction: column; touch-action: none; cursor: grab; }
 .journey .head { padding: calc(12px + var(--safe-t)) 14px 0; display: flex; flex-direction: column; gap: 12px; }
 .journey .head .row { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
-.stages { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.stage {
-  background: #fff; color: var(--naranja); border-radius: 14px; padding: 10px 6px 9px; text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 700; font-size: 10.5px;
-  line-height: 1.15; text-transform: uppercase; transition: opacity 0.4s, transform 0.4s, color 0.4s; box-shadow: 0 8px 24px rgba(30, 27, 24, 0.08);
-  color: var(--gris);
-}
-.stage .ico { width: 34px; height: 34px; border-radius: 50%; background: #d9d4cd; color: #fff; display: grid; place-items: center; transition: background 0.4s; }
-.stage.on { color: var(--naranja); transform: translateY(-2px); box-shadow: var(--sombra); }
-.stage.on .ico { background: var(--naranja); }
-.stage.done { color: var(--naranja); opacity: 0.75; }
-.stage.done .ico { background: var(--naranja); }
-.stage .ico svg { width: 18px; height: 18px; }
+.stages { display: flex; align-items: center; justify-content: center; gap: 28px; height: 84px; }
+.stage { position: relative; color: #aaa59e; transition: color 0.35s, transform 0.35s; }
+.stage .ico { width: 44px; height: 44px; display: grid; place-items: center; }
+.stage .ico svg { width: 25px; height: 25px; }
+.stage.on, .stage.done { color: var(--naranja); }
+.stage.on .ico { animation: stage-breathe 1.6s ease-in-out infinite; }
+.stage.on::before { content: ''; position: absolute; inset: -3px; border: 2px solid rgba(249, 108, 28, 0.15); border-top-color: var(--naranja); border-radius: 50%; animation: stage-spin 1.3s linear infinite; }
+@keyframes stage-spin { to { transform: rotate(360deg); } }
+@keyframes stage-breathe { 50% { transform: scale(1.1); } }
+.journey.is-paused .stage.on::before, .journey.is-paused .stage.on .ico { animation-play-state: paused; }
 @media (min-width: 700px) {
-  .stages { max-width: 760px; margin: 0 auto; width: 100%; gap: 12px; }
-  .stage { font-size: 12.5px; padding: 14px 10px 12px; }
-  .stage .ico { width: 44px; height: 44px; }
-  .stage .ico svg { width: 22px; height: 22px; }
+  .stages { height: 104px; gap: 44px; }
+  .stage .ico { width: 50px; height: 50px; }
+  .stage .ico svg { width: 29px; height: 29px; }
+}
+.typed-copy { display: grid; }
+.typed-reserve, .typed-visible { grid-area: 1 / 1; min-width: 0; }
+.typed-reserve { visibility: hidden; }
+.typed-caret { display: inline-block; height: 0.9em; width: 2px; margin-left: 2px; background: var(--naranja); vertical-align: baseline; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .stage.on::before, .stage.on .ico { animation: none; }
 }
 .journey .stagearea { flex: 1; position: relative; }
 .journey .caption {
@@ -236,4 +240,21 @@ button { cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; }
+}
+
+/* Símbolos clínicos que se convierten en registros de puntos. */
+.health-orbit { pointer-events: none; }
+.health-node { position: fixed; left: 0; top: 0; width: 64px; height: 64px; visibility: hidden; pointer-events: none; --morph: 0; }
+.health-symbol { width: 100%; height: 100%; display: grid; place-items: center; border-radius: 50%; box-shadow: 0 8px 28px rgba(30,27,24,0.09); opacity: calc(1 - var(--morph)); transform: scale(calc(1 - var(--morph) * 0.3)); }
+.health-symbol svg { width: 34px; height: 34px; }
+.health-symbol.ink { background: #171817; color: #fff; }
+.health-symbol.gray { background: #a9adb3; color: #202322; }
+.health-symbol.orange { background: #ff785f; color: #fff; }
+.health-data { position: absolute; inset: 12px; display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; opacity: var(--morph); transform: rotate(calc(var(--morph) * 35deg)); }
+.health-data i { border-radius: 50%; background: #191919; }
+.health-data i:nth-child(3n) { background: var(--naranja); }
+@media (max-width: 699px) {
+  .health-node { width: 40px; height: 40px; }
+  .health-symbol svg { width: 24px; height: 24px; }
+  .health-data { inset: 5px; gap: 3px; }
 }

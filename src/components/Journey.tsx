@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import Logo from "./Logo";
+import HealthOrbit from "./HealthOrbit";
 import type { EngineRef } from "./Scene";
 import type { SceneState, Vec3 } from "@/scene/engine";
 import { CATEGORIES, clusterCenter, BAR_X, BAR_BOTTOM, BAR_MAX_H } from "@/scene/particles";
@@ -18,7 +19,34 @@ const ICONS = [
   <svg key="d" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="13" width="4" height="8" rx="1" /><rect x="10" y="8" width="4" height="13" rx="1" /><rect x="17" y="3" width="4" height="18" rx="1" /></svg>,
 ];
 const STAGE_NAMES = ["Protegiendo identidad", "Agrupando respuestas", "Identificando patrones", "Generando insights"];
-const STEP_MS = [10000, 11000, 9000, 10000, 9000];
+const STEP_MS = [6500, 7500, 6500, 7000, 7000];
+
+/** Reserva el texto completo para que la escritura no mueva la escena ni los controles. */
+function TypedCopy({ text, playing, delay = 0, duration }: { text: string; playing: boolean; delay?: number; duration: number }) {
+  const [count, setCount] = useState(() => playing ? 0 : text.length);
+  const elapsed = useRef(playing ? 0 : delay + duration);
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (reduced.matches) { setCount(text.length); return; }
+    if (!playing) return;
+    let frame = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      if (!document.hidden) elapsed.current += Math.min(now - last, 100);
+      last = now;
+      const progress = Math.max(0, Math.min(1, (elapsed.current - delay) / duration));
+      setCount(Math.floor(progress * text.length));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [text, playing, delay, duration]);
+  return <>
+    <span className="typed-reserve" aria-hidden="true">{text}</span>
+    <span className="typed-visible" aria-hidden="true">{text.slice(0, count)}{playing && count > 0 && count < text.length && <span className="typed-caret" />}</span>
+    <span className="sr-only">{text}</span>
+  </>;
+}
 
 interface Step { title: string; text: string; stage: number; card: number; lock?: number; sway?: boolean }
 
@@ -133,19 +161,20 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
   );
 
   return (
-    <div className="journey" ref={journey}>
+    <div className={`journey${auto ? "" : " is-paused"}`} ref={journey}>
       <div className="head">
         <div className="row"><Logo /><span className="step">{i + 1} / {steps.length}</span></div>
         <div className="stages" aria-label="Etapas">
           {STAGE_NAMES.map((n, k) => (
-            <div key={n} className={`stage ${step.card === k ? "on" : step.card > k ? "done" : ""}`}>
-              <span className="ico">{ICONS[k]}</span>{n}
+            <div key={n} className={`stage ${step.card === k ? "on" : step.card > k ? "done" : ""}`} role="img" aria-label={`${n}${step.card === k ? ": en curso" : step.card > k ? ": completado" : ": pendiente"}`} aria-current={step.card === k ? "step" : undefined} title={n}>
+              <span className="ico" aria-hidden="true">{ICONS[k]}</span>
             </div>
           ))}
         </div>
       </div>
 
       <div className="stagearea" aria-hidden="true">
+        <HealthOrbit state={state} />
         {step.stage === 1 && <>
           {tag("name", "big", onboarding.name)}
           {tag("email", "", onboarding.email)}
@@ -164,8 +193,8 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
 
       <div className="caption" key={i}>
         <div className="txt">
-          <h2>{step.title}</h2>
-          <p>{step.text}</p>
+          <h2 className="typed-copy"><TypedCopy text={step.title} playing={auto} duration={650} /></h2>
+          <p className="typed-copy"><TypedCopy text={step.text} playing={auto} delay={500} duration={1600} /></p>
         </div>
         <div className="actions">
           <button className="btn ghost small" onClick={back} disabled={i === 0} aria-label="Anterior">←</button>
