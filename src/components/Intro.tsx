@@ -4,7 +4,7 @@ import Logo from "./Logo";
 import { CATEGORIES, clusterCenter } from "@/scene/particles";
 import type { SceneState } from "@/scene/engine";
 
-export default function Intro({ state, onStart }: { state: MutableRefObject<SceneState>; onStart: () => void }) {
+export default function Intro({ state, onStart, onLoop, onFill }: { state: MutableRefObject<SceneState>; onStart: () => void; onLoop?: () => void; onFill?: () => void }) {
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   useEffect(() => {
     const st = state.current;
@@ -32,6 +32,7 @@ export default function Intro({ state, onStart }: { state: MutableRefObject<Scen
       <div className="bottom">
         <button className="btn" onClick={onStart}>Formar parte del mapa</button>
         <small>Esta experiencia no sustituye una valoración médica.</small>
+        {onLoop && <span className="loop-btns"><button className="btn ghost small loop-btn" onClick={onLoop}>Modo presentación</button>{onFill && <button className="btn ghost small loop-btn" onClick={onFill}>Iconos → persona</button>}</span>}
       </div>
     </div>
   );

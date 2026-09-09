@@ -12,6 +12,7 @@ uniform float u_bustSize; // tamaño del punto en el busto (px · distancia)
 uniform float u_surface;
 uniform float u_progress; // 0..1 partículas encendidas (formulario)
 uniform float u_dim;      // atenuación global
+uniform float u_revealY;  // solo se ven las partículas por debajo de esta altura (relleno de abajo arriba)
 uniform vec3 u_orange;
 uniform vec3 u_ink;
 uniform vec3 u_cat[6];
@@ -61,6 +62,7 @@ void main() {
   // Encendido progresivo (formulario): las partículas se iluminan al responder.
   float lit = mix(0.22, 1.0, step(seed2, u_progress));
   alpha *= lit * u_dim;
+  alpha *= 1.0 - smoothstep(u_revealY - 0.08, u_revealY + 0.08, p.y);
 
   // Color: tinta, gris y naranja (como el busto punteado del deck); en clusters, por dimensión; en barras, naranja.
   vec3 base = (seed < 0.34) ? u_orange : u_ink;
@@ -100,7 +102,9 @@ in vec3 a_position;
 uniform mat4 u_vp;
 uniform mat4 u_view;
 out vec3 v_view;
+out float v_worldY;
 void main() {
+  v_worldY = a_position.y;
   v_view = (u_view * vec4(a_position, 1.0)).xyz;
   gl_Position = u_vp * vec4(a_position, 1.0);
 }`;
@@ -108,6 +112,8 @@ void main() {
 export const BUST_FS = `#version 300 es
 precision highp float;
 in vec3 v_view;
+in float v_worldY;
+uniform float u_revealY; // relleno de abajo arriba: nada por encima de esta altura
 uniform bool u_depthOnly;
 uniform float u_spacing;
 uniform float u_alpha;
@@ -116,6 +122,7 @@ uniform vec3 u_orange;
 uniform vec3 u_ink;
 out vec4 o;
 void main() {
+  if (v_worldY > u_revealY) discard;
   if (u_depthOnly) { o = vec4(0.0); return; }
   vec2 grid = (gl_FragCoord.xy - u_origin) / u_spacing;
   vec2 cell = floor(grid + 0.5);

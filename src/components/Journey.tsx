@@ -106,11 +106,18 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
     st.sway = !!step.sway;
     const L: { el: HTMLElement | null; pos: Vec3 }[] = [];
     const T = tags.current;
+    // En móvil (retrato) las etiquetas van más afuera y arriba/abajo, para no tapar el busto.
+    const narrow = typeof window !== "undefined" && window.innerWidth < window.innerHeight && window.innerWidth < 700;
+    const W = typeof window !== "undefined" ? window.innerWidth : 0, H = typeof window !== "undefined" ? window.innerHeight : 0;
+    const fr = st.bustFrame ?? { top: H * 0.16, bottom: H * 0.64 };
+    const fy = (k: number) => fr.top + (fr.bottom - fr.top) * k;
+    const sc = (el: HTMLElement | null, x: number, y: number) => ({ el, pos: [0, 0, 0] as Vec3, screen: [x, y] as [number, number] });
     if (step.stage === 1) {
-      L.push({ el: T.name, pos: [0.2, 0.9, 1.6] }, { el: T.email, pos: [0.2, 0.1, -1.55] }, { el: T.company, pos: [0.2, -1.0, 1.7] });
+      if (narrow) L.push(sc(T.name, W / 2, fr.top + 18), sc(T.company, W * 0.17, fr.bottom - 16), sc(T.email, W * 0.66, fr.bottom - 16));
+      else L.push({ el: T.name, pos: [0.2, 0.9, 1.6] }, { el: T.email, pos: [0.2, 0.1, -1.55] }, { el: T.company, pos: [0.2, -1.0, 1.7] });
     } else if (step.stage === 2) {
-      L.push({ el: T.name2, pos: [1.25, 1.2, 0.4] }, { el: T.email2, pos: [-1.3, 0.9, 0.4] }, { el: T.company2, pos: [1.3, -0.2, 0.4] });
-      L.push({ el: T.token, pos: [1.25, -1.25, 0] });
+      if (narrow) L.push(sc(T.name2, W / 2, fr.top + 18), sc(T.email2, W * 0.24, fy(0.3)), sc(T.company2, W * 0.78, fy(0.72)), sc(T.token, W / 2, fr.bottom - 16));
+      else L.push({ el: T.name2, pos: [1.25, 1.2, 0.4] }, { el: T.email2, pos: [-1.3, 0.9, 0.4] }, { el: T.company2, pos: [1.3, -0.2, 0.4] }, { el: T.token, pos: [1.25, -1.25, 0] });
     } else if (step.stage === 3) {
       L.push({ el: T.n, pos: [0, -1.7, 0] });
     } else if (step.stage === 4) {

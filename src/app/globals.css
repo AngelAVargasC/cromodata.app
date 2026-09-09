@@ -308,6 +308,17 @@ button { cursor: pointer; }
   .results .rv, .results .tile.rv, .split2 li, .split2 li svg, .split2 li svg .tick, .pico, .pico * { animation: none !important; stroke-dashoffset: 0 !important; opacity: 1; transform: none; }
 }
 
+/* ----- modo presentación (solo animación en ciclo) ----- */
+.loop { position: absolute; inset: 0; touch-action: none; cursor: grab; }
+.loop-top { position: absolute; left: 20px; top: calc(16px + var(--safe-t)); opacity: 0.85; }
+.loop-exit { position: absolute; right: 14px; top: calc(12px + var(--safe-t)); width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(30, 27, 24, 0.15); background: rgba(255, 255, 255, 0.7); color: var(--tinta); font-size: 20px; line-height: 1; opacity: 0.35; transition: opacity 0.2s; }
+.loop-exit:hover { opacity: 1; }
+.loop-btn { margin-top: 4px; opacity: 0.7; }
+.fill-label { position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--tinta); background: #fff; padding: 6px 14px; border-radius: 999px; box-shadow: var(--sombra); pointer-events: none; }
+@media (max-width: 600px) { .fill-label { font-size: 12px; padding: 4px 10px; } }
+.loop-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+
 .hidden { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -330,3 +341,4 @@ button { cursor: pointer; }
   .health-symbol svg { width: 24px; height: 24px; }
   .health-data { inset: 5px; gap: 3px; }
 }
+.formation-particles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

@@ -6,7 +6,9 @@ import "./admin.css";
 
 export const dynamic = "force-dynamic";
 
-const fmt = (d: Date) => new Intl.DateTimeFormat("es-MX", { dateStyle: "short", timeStyle: "short" }).format(d);
+// El servidor (Railway) corre en UTC: las fechas se muestran en la zona del evento.
+const TZ = process.env.ADMIN_TZ || "America/Mexico_City";
+const fmt = (d: Date) => new Intl.DateTimeFormat("es-MX", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
 const list = (json: string) => { try { return (JSON.parse(json) as string[]).join(", "); } catch { return json; } };
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ error?: string; tab?: string }> }) {

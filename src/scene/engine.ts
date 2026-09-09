@@ -14,10 +14,15 @@ export interface SceneState {
   /** Balanceo suave alrededor del ángulo fijo, para que se lea el volumen. */
   sway: boolean;
   motionPaused?: boolean;
+  /** Altura de mundo hasta la que se ven las partículas (relleno de abajo arriba); sin valor = todas. */
+  revealY?: number;
+  /** Mezcla exacta de la formación aislada, sin afectar las transiciones del recorrido. */
+  formationVisibility?: number;
   healthIcons?: (HTMLElement | null)[];
   /** Franja visible para el busto, en píxeles CSS, entre tarjetas y pie. */
   bustFrame?: { top: number; bottom: number };
-  labels: { el: HTMLElement | null; pos: Vec3 }[];
+  /** Etiquetas ancladas al mundo (pos) o, si trae `screen`, fijas en píxeles CSS. */
+  labels: { el: HTMLElement | null; pos: Vec3; screen?: [number, number] }[];
 }
 
 const ORANGE: Vec3 = [0.95, 0.42, 0.13];
@@ -122,7 +127,7 @@ export class Engine {
     this.prog = program(gl, PARTICLE_VS, PARTICLE_FS);
     this.bg = program(gl, BG_VS, BG_FS);
     this.bustProg = program(gl, BUST_VS, BUST_FS);
-    for (const n of ["u_vp", "u_view", "u_depthOnly", "u_spacing", "u_alpha", "u_origin", "u_orange", "u_ink"]) this.US[n] = gl.getUniformLocation(this.bustProg, n);
+    for (const n of ["u_vp", "u_view", "u_depthOnly", "u_spacing", "u_alpha", "u_revealY", "u_origin", "u_orange", "u_ink"]) this.US[n] = gl.getUniformLocation(this.bustProg, n);
     this.bustVao = gl.createVertexArray()!;
     gl.bindVertexArray(this.bustVao);
     const surface = buildBustSurface();
@@ -133,7 +138,7 @@ export class Engine {
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 0, 0);
     gl.bindVertexArray(null);
-    for (const n of ["u_vp", "u_stage", "u_time", "u_size", "u_bustSize", "u_surface", "u_progress", "u_dim", "u_orange", "u_ink", "u_cat"]) {
+    for (const n of ["u_vp", "u_stage", "u_time", "u_size", "u_bustSize", "u_surface", "u_progress", "u_dim", "u_revealY", "u_orange", "u_ink", "u_cat"]) {
       this.U[n] = gl.getUniformLocation(this.prog, n);
     }
     for (const n of ["u_res", "u_time", "u_glow"]) this.UB[n] = gl.getUniformLocation(this.bg, n);
@@ -243,6 +248,18 @@ export class Engine {
 
   debug() { return { stage: this.state.stage, stageCur: this.stageCur, tween: this.tween, dist: this.dist, portrait: this.portrait, angle: this.angle, errors: this.errors }; }
 
+  /** Una partícula visible por celda del perfil, conservando la geometría aprobada. */
+  formationTargets(): Vec3[] {
+    const cells = new Map<string, Vec3>();
+    for (let i = 0; i < N; i++) {
+      const o = (i * LAYOUTS + 1) * 3;
+      const p: Vec3 = [this.data.pos[o], this.data.pos[o + 1], this.data.pos[o + 2]];
+      const key = `${p[1].toFixed(4)},${p[2].toFixed(4)}`;
+      if (!cells.has(key) || cells.get(key)![0] < p[0]) cells.set(key, p);
+    }
+    return [...cells.values()];
+  }
+
   private tick(now: number) {
     if (this.state.motionPaused && this.last) this.t0 += now - this.last;
     const dt = Math.min(0.05, (now - this.last) / 1000 || 0.016);
@@ -330,7 +347,8 @@ export class Engine {
     // Punto del busto: 78 % del paso de la retícula, en píxeles de dispositivo
     gl.uniform1f(this.U.u_bustSize, 0.78 * BUST_STEP * modelScale * (this.canvas.height / this.viewH));
     gl.uniform1f(this.U.u_progress, this.progressCur);
-    gl.uniform1f(this.U.u_dim, this.dimCur);
+    gl.uniform1f(this.U.u_dim, this.dimCur * (st.formationVisibility ?? 1));
+    gl.uniform1f(this.U.u_revealY, st.revealY ?? 100);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.POINTS, 0, N);
     gl.bindVertexArray(null);
@@ -348,7 +366,8 @@ export class Engine {
       gl.colorMask(true, true, true, true);
       gl.uniform1i(this.US.u_depthOnly, 0);
       gl.uniform1f(this.US.u_spacing, Math.max(2, BUST_STEP * modelScale * this.canvas.height / this.viewH));
-      gl.uniform1f(this.US.u_alpha, surfaceAlpha * this.dimCur);
+      gl.uniform1f(this.US.u_alpha, surfaceAlpha * this.dimCur * (st.formationVisibility ?? 1));
+      gl.uniform1f(this.US.u_revealY, st.revealY ?? 100);
       gl.uniform2f(this.US.u_origin, this.canvas.width / 2, this.canvas.height * (0.5 + yOff / this.viewH));
       gl.uniform3fv(this.US.u_orange, ORANGE);
       gl.uniform3fv(this.US.u_ink, INK);
@@ -371,7 +390,19 @@ export class Engine {
       const a = k * Math.PI / 3 + 0.2 + 0.07 * Math.sin(t * 0.5);
       const radius = 1 - gather * 0.88;
       const p: Vec3 = [Math.cos(a) * 1.65 * radius, (Math.sin(a) * 1.13 + 0.16) * radius, Math.sin(a * 2 + t * 0.3) * 0.25 * radius];
-      const [x, y] = this.project(p, orbitView);
+      let [x, y] = this.project(p, orbitView);
+      if (this.portrait > 0.5) {
+        // En retrato la escena es pequeña y los iconos caían sobre el busto: se reparten en
+        // una elipse en píxeles alrededor de la franja del busto y convergen al centro al anonimizar.
+        const W = this.canvas.width / this.dpr, H = this.canvas.height / this.dpr;
+        const bcy = this.project([0, 0.1, 0], orbitView)[1];
+        const top = st.bustFrame?.top ?? H * 0.15, bottom = st.bustFrame?.bottom ?? H * 0.7;
+        const cy = st.bustFrame ? (top + bottom) / 2 : bcy;
+        const rx = W * 0.5 - 34, ry = Math.max(100, (bottom - top) / 2 - 100);
+        const r = 1 - gather * 0.88;
+        x = W / 2 + Math.cos(a) * rx * r;
+        y = cy + Math.sin(a) * ry * r;
+      }
       el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${1 - gather * 0.65})`;
       el.style.opacity = String(Math.min(1, (this.stageCur - 0.8) / 0.2) * (1 - Math.pow(morph, 4)));
       el.style.setProperty("--morph", String(Math.min(1, morph * 3)));
@@ -380,6 +411,11 @@ export class Engine {
     // Los datos comparten la transformación del modelo: posición, giro e inclinación.
     for (const l of st.labels) {
       if (!l.el) continue;
+      if (l.screen) {
+        l.el.style.transform = `translate(-50%, -50%) translate(${l.screen[0].toFixed(1)}px, ${l.screen[1].toFixed(1)}px)`;
+        l.el.style.opacity = "1";
+        continue;
+      }
       const [x, y, ok] = this.project(l.pos);
       const depth = view[2] * l.pos[0] + view[6] * l.pos[1] + view[10] * l.pos[2];
       const near = Math.max(0, Math.min(1, (depth + 2) / 4));

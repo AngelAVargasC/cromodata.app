@@ -16,6 +16,8 @@ Atajos útiles:
 
 - `http://localhost:3000/?demo=1` salta el formulario y entra directo al recorrido (para ensayar).
 - Flechas ← → o barra espaciadora avanzan el recorrido; el botón «Auto» avanza solo cada 7,5 s.
+- `?loop=1` deja solo la animación en ciclo, sin textos, para proyectarla; `?kiosk=1` muestra en la intro los botones de estas animaciones (ocultos por defecto). Esc sale.
+- `http://localhost:3000/?fill=1` animación aislada en bucle: iconos → puntos → persona construyéndose de abajo arriba.
 - `GET /api/aggregate` devuelve la radiografía de la sala en JSON.
 - `/admin` (con `ADMIN_PASSWORD`) muestra las respuestas; `npm run db:studio` abre Prisma Studio.
 

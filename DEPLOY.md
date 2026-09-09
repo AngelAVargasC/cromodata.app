@@ -11,6 +11,7 @@ volumen: la base vive en Postgres.
    DATABASE_URL=${{Postgres.DATABASE_URL}}
    ROOM_BASELINE=120
    ADMIN_PASSWORD=<una clave larga>
+   ADMIN_TZ=America/Mexico_City
    ```
 
    `${{Postgres.DATABASE_URL}}` es una referencia a la variable del servicio Postgres:

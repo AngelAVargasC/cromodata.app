@@ -5,11 +5,13 @@ import Intro from "@/components/Intro";
 import Form from "@/components/Form";
 import Journey from "@/components/Journey";
 import Results from "@/components/Results";
+import Loop from "@/components/Loop";
+import FillLoop from "@/components/FillLoop";
 import { splitAnswers, type Answers, type OnboardingData } from "@/lib/questions";
 import type { Aggregate } from "@/lib/signals";
 import type { Engine } from "@/scene/engine";
 
-type Phase = "intro" | "form" | "sending" | "journey" | "results";
+type Phase = "intro" | "form" | "sending" | "journey" | "results" | "loop" | "fill";
 
 const DEMO: OnboardingData = {
   name: "Keila Barral", email: "keila@cromodata.com", company: "Cromodata", sector: "Healthtech o tecnología",
@@ -24,10 +26,18 @@ export default function Page() {
   const [token, setToken] = useState("CD-demo");
   const [agg, setAgg] = useState<Aggregate | null>(null);
   const [error, setError] = useState("");
+  // Botones «Modo presentación» e «Iconos → persona»: solo con ?kiosk=1.
+  const [canLoop, setCanLoop] = useState(false);
 
   // ?demo=1 salta el formulario y va directo al recorrido (para ensayar la presentación).
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("demo")) {
+    const q = new URLSearchParams(window.location.search);
+    // Los botones de las animaciones aisladas quedan ocultos para los asistentes:
+    // solo aparecen con ?kiosk=1 (las animaciones siguen accesibles con ?loop=1 y ?fill=1).
+    setCanLoop(!!q.get("kiosk"));
+    if (q.get("loop")) { setPhase("loop"); return; }
+    if (q.get("fill")) { setPhase("fill"); return; }
+    if (q.get("demo")) {
       fetch("/api/aggregate").then((r) => r.json()).then((a: Aggregate) => {
         setAgg(a); setToken("CD-" + Math.random().toString(16).slice(2, 14)); setPhase("journey");
       });
@@ -56,7 +66,13 @@ export default function Page() {
     <div className="app">
       <Scene state={state} engineRef={engineRef} />
       <div className="ui">
-        {phase === "intro" && <Intro state={state} onStart={() => setPhase("form")} />}
+        {phase === "intro" && <Intro state={state} onStart={() => setPhase("form")} onLoop={canLoop ? () => { setPhase("loop"); document.documentElement.requestFullscreen?.().catch(() => {}); } : undefined} onFill={canLoop ? () => { setPhase("fill"); document.documentElement.requestFullscreen?.().catch(() => {}); } : undefined} />}
+        {phase === "fill" && (
+          <FillLoop state={state} engineRef={engineRef} onExit={() => { setPhase("intro"); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); }} />
+        )}
+        {phase === "loop" && (
+          <Loop state={state} engineRef={engineRef} onExit={() => { setPhase("intro"); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); }} />
+        )}
         {(phase === "form" || phase === "sending") && (
           <>
             <Form state={state} onDone={submit} onBack={() => setPhase("intro")} />

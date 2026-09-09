@@ -2,7 +2,7 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import type { SceneState } from "@/scene/engine";
 
-const SYMBOLS = [
+export const SYMBOLS = [
   { name: "Genética", tone: "ink", path: "M8 3c0 9 16 9 16 26M24 3c0 9-16 9-16 26M9 6h14M12 11h8M12 21h8M9 26h14" },
   { name: "Estudios de imagen", tone: "gray", path: "M4 5h24v18H4zM8 9h16v10H8zM12 27h8M16 23v4M10 17l4-5 4 3 4-2" },
   { name: "Historia clínica", tone: "orange", path: "M9 5H5v24h22V5h-4M11 3h10v5H11zM14 12h4v3h3v4h-3v3h-4v-3h-3v-4h3zM10 26h12" },

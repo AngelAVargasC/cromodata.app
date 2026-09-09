@@ -49,6 +49,30 @@ Entrada más reciente arriba. Cada sesión: qué se hizo, qué se decidió, qué
   sesión; `DeleteForm.tsx` pide confirmación del navegador antes de enviar. No probado en
   local (sin Postgres); probar en Railway.
 
+- **Modo presentación** (`src/components/Loop.tsx`): solo la animación en ciclo (globo →
+  busto → bloque → dataset → clusters → barras, 6–7 s cada una), sin textos ni controles,
+  con el logo y una × discreta. Entra con el botón «Modo presentación» de la intro (solo
+  visible en localhost o con `?kiosk=1`) o directamente con `?loop=1`. Pide pantalla
+  completa al entrar; Esc sale.
+
+- **Animación aislada «iconos → persona»** (`src/components/FillLoop.tsx`, `?fill=1` o botón
+  «Iconos → persona» en la intro local): los seis iconos clínicos orbitan con etiquetas en
+  cascada (Genómica, Estudios de imagen, Historiales clínicos, Hospitales, Laboratorios,
+  Centros de salud), se fragmentan en puntos, convergen al centro y de ahí la persona se
+  construye de abajo hacia arriba; se sostiene, se desvanece y vuelve a empezar (~15 s).
+  Para ello el estado tiene `revealY` y los dos shaders (partículas y superficie del
+  busto) descartan lo que queda por encima de esa altura.
+
+- Antes del push: los botones «Modo presentación» e «Iconos → persona» quedan **ocultos
+  para los asistentes**; solo aparecen con `?kiosk=1`. `?loop=1` y `?fill=1` siguen
+  funcionando para proyectar.
+
+- **Móvil, paso «Esto eres tú»**: en retrato los iconos clínicos caían sobre el busto. Ahora
+  en retrato se reparten en una elipse en píxeles alrededor de la franja del busto
+  (`bustFrame`) y las etiquetas nombre/correo/empresa (y las tachadas + token del paso 2)
+  usan posiciones fijas de pantalla (`labels[].screen`) en vez de coordenadas de mundo.
+  En escritorio no cambia nada.
+
 ### Qué se decidió
 
 - Angel pidió **mantener las formas** de los pasos 2 y 3 (blob y esferas). Se probó una
