@@ -1,12 +1,9 @@
+// Logotipo oficial de Cromodata (vector extraído de cromodata.com, en public/brand/).
 export default function Logo({ white = false }: { white?: boolean }) {
-  const c = white ? "#fff" : "#f26a21";
+  const src = white ? "/brand/cromodata-logo-white.svg" : "/brand/cromodata-logo-black.svg";
   return (
-    <span className="logo" aria-label="Cromodata">
-      <svg viewBox="0 0 30 20" fill="none" aria-hidden="true">
-        <path d="M2 2l8 8-8 8" stroke={c} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M14 2l8 8-8 8" stroke={c} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      Cromodata
+    <span className="logo">
+      <img src={src} alt="Cromodata" width={155} height={22} draggable={false} />
     </span>
   );
 }

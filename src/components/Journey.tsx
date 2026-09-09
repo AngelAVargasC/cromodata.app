@@ -198,7 +198,7 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
         </div>
         <div className="actions">
           <button className="btn ghost small" onClick={back} disabled={i === 0} aria-label="Anterior">←</button>
-          <button className="btn" onClick={next}>{i === steps.length - 1 ? "Ver la radiografía de la sala" : "Siguiente"}</button>
+          <button className="btn" onClick={next}>{i === steps.length - 1 ? "Ver la radiografía" : "Siguiente"}</button>
           <button className="btn ghost small" onClick={() => setAuto((playing) => !playing)} aria-label={auto ? "Pausar recorrido automático" : "Continuar recorrido automático"} title={auto ? "Pausar recorrido automático" : "Continuar recorrido automático"}>{auto ? "Pausar" : "Continuar"}</button>
         </div>
       </div>

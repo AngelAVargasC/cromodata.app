@@ -4,6 +4,49 @@ Entrada más reciente arriba. Cada sesión: qué se hizo, qué se decidió, qué
 
 ---
 
+## 2026-09-09 — Sesión 4: logotipo oficial, iconos de Angel, fix de Railway
+
+### Qué se hizo
+
+- **Logotipo oficial**: extraído en vector de cromodata.com (Framer lo incrusta como SVG en
+  línea; el `fill` usaba tokens de Framer y se sustituyó por color fijo o `currentColor`).
+  Guardado en `public/brand/` (negro, blanco, naranja, `currentColor`, isotipo, icono PNG
+  y `preview.html`). `Logo.tsx` ahora pinta ese SVG: negro en intro/formulario/recorrido,
+  blanco en resultados.
+- Angel añadió por su cuenta `HealthOrbit.tsx` (iconos clínicos que orbitan el busto),
+  texto que se escribe letra a letra, pausa del avance automático y tarjetas de etapa
+  reducidas a iconos. Revisado: completo, sin errores.
+- `prisma.config.ts` ya no aborta si falta `DATABASE_URL` (fallo de build en Railway).
+
+- **Resultados rediseñados** (`Results.tsx` + bloque CSS «resultados»): fondo crema con
+  acentos naranja en vez de fondo naranja; rejilla 7/5 en escritorio que cabe en una
+  pantalla (señales con etiqueta · barra · % en una línea, cuatro cifras destacadas en
+  2×2, bloqueados/visibles y pilares en fila). En móvil apila y la etiqueta va sobre la
+  barra. Se eliminaron las clases antiguas `.card`, `.grid2`, `.bignum`, `.split`, `.pillars`.
+
+- **Reporte vivo**: entrada escalonada de cada bloque (`.rv` con `--i`), salida animada al
+  pulsar «Nuevo participante» (clase `is-leaving`, 0,5 s antes de reiniciar), cifras que
+  cuentan hacia arriba, checks que se dibujan, candados en cascada e iconos animados en
+  los pilares (escudo que se traza y late, globo con órbita, chevrones que se acercan).
+  Todo respeta `prefers-reduced-motion`.
+- **Botones más ligeros** en toda la app: 44 px de alto, peso 500, 15 px, sombra suave;
+  los `small` a 38 px. El último paso del recorrido dice «Ver la radiografía» para que
+  no parta en tres líneas en móvil.
+
+### Qué se decidió
+
+- Angel pidió **mantener las formas** de los pasos 2 y 3 (blob y esferas). Se probó una
+  versión en retícula regular tipo lámina «Anonymized / Dataset» y **la rechazó**; se
+  revirtió todo al último commit. No volver a proponerla. Quedó pendiente solo subir la
+  tupidez/definición de los puntos en esos pasos, si lo pide.
+
+### Qué quedó abierto
+
+- Confirmar que el deploy de Railway corresponde al último commit (pestaña Deployments).
+- Pendientes anteriores.
+
+---
+
 ## 2026-09-09 — Sesión 3: busto 3D de perfil, fondo crema liso
 
 ### Qué se hizo
