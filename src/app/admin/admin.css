@@ -29,3 +29,9 @@
 .adm-table .yes { color: var(--naranja-oscuro); font-weight: 600; }
 .adm-table .empty { text-align: center; color: #8a837c; padding: 28px; }
 @media (max-width: 640px) { .adm-stats { grid-template-columns: 1fr; } }
+.adm-del { display: inline; }
+.adm-danger { font: inherit; font-size: 12.5px; font-weight: 500; padding: 6px 12px; border-radius: 999px; border: 1.5px solid #e6c9bd; background: #fff; color: #b3401a; cursor: pointer; white-space: nowrap; }
+.adm-danger:hover { background: #fdf1ec; border-color: #d4541a; }
+.adm-danger.strong { background: #b3401a; border-color: #b3401a; color: #fff; }
+.adm-danger.strong:hover { background: #962f0f; }
+.adm-actions { flex-wrap: wrap; }

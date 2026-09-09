@@ -43,6 +43,12 @@ Entrada más reciente arriba. Cada sesión: qué se hizo, qué se decidió, qué
   dos pestañas (onboarding profesional y salud anónima), contadores y descarga CSV
   (`/api/admin/export?type=perfil|salud`). Código en `src/lib/admin.ts`, `src/app/admin/`.
 
+- **Borrado real en `/admin`** (Angel: sin soft delete): botón «Borrar» por fila en las dos
+  tablas, «Borrar todos los perfiles» / «Borrar todas las respuestas de salud» según la
+  pestaña y «Vaciar todo». Server actions en `src/app/admin/actions.ts` con comprobación de
+  sesión; `DeleteForm.tsx` pide confirmación del navegador antes de enviar. No probado en
+  local (sin Postgres); probar en Railway.
+
 ### Qué se decidió
 
 - Angel pidió **mantener las formas** de los pasos 2 y 3 (blob y esferas). Se probó una
