@@ -18,6 +18,7 @@ const ICONS = [
   <svg key="d" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="13" width="4" height="8" rx="1" /><rect x="10" y="8" width="4" height="13" rx="1" /><rect x="17" y="3" width="4" height="18" rx="1" /></svg>,
 ];
 const STAGE_NAMES = ["Protegiendo identidad", "Agrupando respuestas", "Identificando patrones", "Generando insights"];
+const STEP_MS = [10000, 11000, 9000, 10000, 9000];
 
 interface Step { title: string; text: string; stage: number; card: number; lock?: number; sway?: boolean }
 
@@ -34,10 +35,16 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
     { title: "Generando insights", text: "De la sala salen porcentajes, no personas. Esto es lo que hoy puede ver un hospital, un investigador o la industria: patrones colectivos, con la identidad de cada persona bloqueada.", stage: 5, card: 3, lock: 0 },
   ];
   const [i, setI] = useState(0);
-  const [auto, setAuto] = useState(false);
+  const [auto, setAuto] = useState(true);
+  const clock = useRef({ step: 0, remaining: STEP_MS[0] });
   const tags = useRef<Record<string, HTMLDivElement | null>>({});
   const journey = useRef<HTMLDivElement>(null);
   const step = steps[i];
+
+  useEffect(() => {
+    state.current.motionPaused = !auto;
+    return () => { state.current.motionPaused = false; };
+  }, [auto, state]);
 
   useEffect(() => {
     const root = journey.current;
@@ -92,6 +99,7 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      if ((e.target as Element | null)?.closest("button, input, textarea, select, a")) return;
       if (e.key === "ArrowRight" || e.key === " " || e.key === "Enter") { e.preventDefault(); next(); }
       if (e.key === "ArrowLeft") back();
     };
@@ -100,9 +108,24 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
   }, [next, back]);
 
   useEffect(() => {
+    if (clock.current.step !== i) clock.current = { step: i, remaining: STEP_MS[i] };
     if (!auto) return;
-    const t = setTimeout(next, 7500);
-    return () => clearTimeout(t);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let started: number | null = null;
+    const stop = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      if (started !== null) clock.current.remaining = Math.max(0, clock.current.remaining - (performance.now() - started));
+      started = null;
+    };
+    const start = () => {
+      if (document.hidden) return;
+      started = performance.now();
+      timer = setTimeout(() => { started = null; clock.current.remaining = 0; next(); }, clock.current.remaining);
+    };
+    const visibility = () => { stop(); start(); };
+    document.addEventListener("visibilitychange", visibility);
+    start();
+    return () => { stop(); document.removeEventListener("visibilitychange", visibility); };
   }, [auto, i, next]);
 
   const tag = (id: string, cls: string, children: React.ReactNode) => (
@@ -147,7 +170,7 @@ export default function Journey({ state, engineRef, onboarding, token, aggregate
         <div className="actions">
           <button className="btn ghost small" onClick={back} disabled={i === 0} aria-label="Anterior">←</button>
           <button className="btn" onClick={next}>{i === steps.length - 1 ? "Ver la radiografía de la sala" : "Siguiente"}</button>
-          <button className={`btn ghost small`} onClick={() => setAuto(!auto)} aria-pressed={auto} title="Avance automático">{auto ? "Auto ●" : "Auto"}</button>
+          <button className="btn ghost small" onClick={() => setAuto((playing) => !playing)} aria-label={auto ? "Pausar recorrido automático" : "Continuar recorrido automático"} title={auto ? "Pausar recorrido automático" : "Continuar recorrido automático"}>{auto ? "Pausar" : "Continuar"}</button>
         </div>
       </div>
     </div>

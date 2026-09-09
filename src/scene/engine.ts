@@ -13,6 +13,7 @@ export interface SceneState {
   lockAngle: number | null;
   /** Balanceo suave alrededor del ángulo fijo, para que se lea el volumen. */
   sway: boolean;
+  motionPaused?: boolean;
   /** Franja visible para el busto, en píxeles CSS, entre tarjetas y pie. */
   bustFrame?: { top: number; bottom: number };
   labels: { el: HTMLElement | null; pos: Vec3 }[];
@@ -92,6 +93,8 @@ export class Engine {
   private dimCur = 1;
   private glowCur = 1;
   private tilt = 0.22;
+  private motionStage = -1;
+  private motionStart = 0;
 
   constructor(private host: HTMLElement, private state: SceneState) {
     const canvas = document.createElement("canvas");
@@ -240,10 +243,17 @@ export class Engine {
   debug() { return { stage: this.state.stage, stageCur: this.stageCur, tween: this.tween, dist: this.dist, portrait: this.portrait, angle: this.angle, errors: this.errors }; }
 
   private tick(now: number) {
+    if (this.state.motionPaused && this.last) this.t0 += now - this.last;
     const dt = Math.min(0.05, (now - this.last) / 1000 || 0.016);
     this.last = now;
     const t = (now - this.t0) / 1000;
     const st = this.state;
+    if (this.motionStage !== st.stage) {
+      this.motionStage = st.stage;
+      this.motionStart = t;
+      this.userUntil = 0;
+      this.dragVel = 0;
+    }
 
     // Etapa (tween lineal; el suavizado va por partícula en el shader)
     if (st.stage !== (this.tween ? this.tween.to : this.stageCur)) this.goTo(st.stage);
@@ -262,16 +272,18 @@ export class Engine {
     const userDriving = now < this.userUntil;
     if (userDriving) {
       if (!this.dragging) this.angle += this.dragVel; // inercia solo tras soltar
-    } else if (st.lockAngle !== null) {
-      const base = st.lockAngle;
+    } else if (!st.motionPaused && st.lockAngle !== null) {
+      // Del perfil hacia tres cuartos y de vuelta durante la presentación personal.
+      const orbit = st.sway ? 1.25 * Math.pow(Math.sin((t - this.motionStart) * 0.30), 2) : 0;
+      const base = st.lockAngle + orbit;
       // Equivalente más cercano al ángulo actual, para no dar la vuelta larga.
       const target = base + Math.round((this.angle - base) / (Math.PI * 2)) * Math.PI * 2;
       this.angle += (target - this.angle) * ease(0.4);
-    } else {
+    } else if (!st.motionPaused) {
       this.angle += 0.12 * dt + this.dragVel;
     }
     this.dragVel *= Math.exp(-dt / 0.2);
-    if (!userDriving) {
+    if (!userDriving && !st.motionPaused) {
       const tiltTarget = st.lockAngle !== null ? 0.0 : 0.22;
       this.tilt += (tiltTarget - this.tilt) * ease(0.5);
     }
@@ -345,15 +357,15 @@ export class Engine {
       gl.bindVertexArray(null);
     }
 
-    // En el busto las etiquetas conservan los laterales y no ocultan el rostro al girar.
-    const labelVp = st.stage === 1
-      ? mul(this.proj, mul(translate(0, yOff, -this.dist), mul(scale(modelScale), rotY(-Math.PI / 2))))
-      : this.vp;
+    // Los datos comparten la transformación del modelo: posición, giro e inclinación.
     for (const l of st.labels) {
       if (!l.el) continue;
-      const [x, y, ok] = this.project(l.pos, labelVp);
-      l.el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
-      l.el.style.opacity = ok ? "" : "0";
+      const [x, y, ok] = this.project(l.pos);
+      const depth = view[2] * l.pos[0] + view[6] * l.pos[1] + view[10] * l.pos[2];
+      const near = Math.max(0, Math.min(1, (depth + 2) / 4));
+      l.el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${(0.88 + near * 0.16).toFixed(3)})`;
+      l.el.style.opacity = ok ? String(0.45 + near * 0.55) : "0";
+      l.el.style.zIndex = String(10 + Math.round(near * 20));
     }
   }
 
