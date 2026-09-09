@@ -9,6 +9,7 @@ uniform float u_stage;    // 0..5 continuo
 uniform float u_time;
 uniform float u_size;     // tamaño base en px (ya con dpr y distancia)
 uniform float u_bustSize; // tamaño del punto en el busto (px · distancia)
+uniform float u_surface;
 uniform float u_progress; // 0..1 partículas encendidas (formulario)
 uniform float u_dim;      // atenuación global
 uniform vec3 u_orange;
@@ -68,7 +69,7 @@ void main() {
   float w2 = smoothstep(4.2, 5.0, s);
   c = mix(c, (seed < 0.34) ? u_orange : u_ink, w2);
   v_color = c;
-  v_alpha = alpha * (0.75 + 0.25 * seed2);
+  v_alpha = alpha * (0.75 + 0.25 * seed2) * (1.0 - u_surface);
 
   vec4 clip = u_vp * vec4(p, 1.0);
   gl_Position = clip;
@@ -82,12 +83,53 @@ in vec3 v_color;
 in float v_alpha;
 out vec4 o;
 void main() {
+  if (v_alpha < 0.001) discard;
   vec2 c = gl_PointCoord * 2.0 - 1.0;
   float d = dot(c, c);
   if (d > 1.0) discard;
   if (d > 0.82) discard;
   float a = smoothstep(0.82, 0.5, d) * v_alpha;
   o = vec4(v_color * a, a); // premultiplicado
+}`;
+
+// Retícula en pantalla: un punto por celda incluso al girar. La pasada de profundidad
+// usa la superficie completa, para que la espalda no aparezca entre los puntos de la cara.
+export const BUST_VS = `#version 300 es
+precision highp float;
+in vec3 a_position;
+uniform mat4 u_vp;
+uniform mat4 u_view;
+out vec3 v_view;
+void main() {
+  v_view = (u_view * vec4(a_position, 1.0)).xyz;
+  gl_Position = u_vp * vec4(a_position, 1.0);
+}`;
+
+export const BUST_FS = `#version 300 es
+precision highp float;
+in vec3 v_view;
+uniform bool u_depthOnly;
+uniform float u_spacing;
+uniform float u_alpha;
+uniform vec2 u_origin;
+uniform vec3 u_orange;
+uniform vec3 u_ink;
+out vec4 o;
+void main() {
+  if (u_depthOnly) { o = vec4(0.0); return; }
+  vec2 grid = (gl_FragCoord.xy - u_origin) / u_spacing;
+  vec2 cell = floor(grid + 0.5);
+  float radius = length(grid - cell);
+  float edge = max(fwidth(radius), 0.01);
+  vec3 normal = normalize(cross(dFdx(v_view), dFdy(v_view)));
+  float coverage = 1.0 - smoothstep(0.35 - edge, 0.35 + edge, radius);
+  if (coverage < 0.01) discard;
+  float seed = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+  if (normal.z < 0.0) normal = -normal;
+  float light = 0.72 + 0.28 * max(0.0, dot(normal, normalize(vec3(-0.4, 0.6, 1.0))));
+  vec3 color = seed < 0.34 ? u_orange * light : mix(vec3(0.30), u_ink, light);
+  float alpha = coverage * u_alpha;
+  o = vec4(color * alpha, alpha);
 }`;
 
 export const BG_VS = `#version 300 es

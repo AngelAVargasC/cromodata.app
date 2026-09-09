@@ -1,5 +1,5 @@
-import { buildParticles, fillBars, N, LAYOUTS, BUST_STEP, type ParticleData } from "./particles";
-import { PARTICLE_VS, PARTICLE_FS, BG_VS, BG_FS } from "./shaders";
+import { buildParticles, buildBustSurface, fillBars, N, LAYOUTS, BUST_STEP, type ParticleData } from "./particles";
+import { PARTICLE_VS, PARTICLE_FS, BUST_VS, BUST_FS, BG_VS, BG_FS } from "./shaders";
 
 export type Vec3 = [number, number, number];
 
@@ -69,6 +69,10 @@ export class Engine {
   private posBuf!: WebGLBuffer;
   private prog!: WebGLProgram;
   private bg!: WebGLProgram;
+  private bustProg!: WebGLProgram;
+  private bustVao!: WebGLVertexArrayObject;
+  private bustCount = 0;
+  private US: Record<string, WebGLUniformLocation | null> = {};
   private vao!: WebGLVertexArrayObject;
   private U: Record<string, WebGLUniformLocation | null> = {};
   private UB: Record<string, WebGLUniformLocation | null> = {};
@@ -113,7 +117,19 @@ export class Engine {
     const gl = this.gl;
     this.prog = program(gl, PARTICLE_VS, PARTICLE_FS);
     this.bg = program(gl, BG_VS, BG_FS);
-    for (const n of ["u_vp", "u_stage", "u_time", "u_size", "u_bustSize", "u_progress", "u_dim", "u_orange", "u_ink", "u_cat"]) {
+    this.bustProg = program(gl, BUST_VS, BUST_FS);
+    for (const n of ["u_vp", "u_view", "u_depthOnly", "u_spacing", "u_alpha", "u_origin", "u_orange", "u_ink"]) this.US[n] = gl.getUniformLocation(this.bustProg, n);
+    this.bustVao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.bustVao);
+    const surface = buildBustSurface();
+    this.bustCount = surface.length / 3;
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, surface, gl.STATIC_DRAW);
+    const position = gl.getAttribLocation(this.bustProg, "a_position");
+    gl.enableVertexAttribArray(position);
+    gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    for (const n of ["u_vp", "u_stage", "u_time", "u_size", "u_bustSize", "u_surface", "u_progress", "u_dim", "u_orange", "u_ink", "u_cat"]) {
       this.U[n] = gl.getUniformLocation(this.prog, n);
     }
     for (const n of ["u_res", "u_time", "u_glow"]) this.UB[n] = gl.getUniformLocation(this.bg, n);
@@ -182,27 +198,31 @@ export class Engine {
 
   /** Instante hasta el que manda el usuario (después de arrastrar, la cámara no vuelve sola). */
   private userUntil = 0;
+  private dragging = false;
+  private dragEvents = new AbortController();
   private bindDrag() {
-    let dragging = false, lastX = 0, lastY = 0;
+    let lastX = 0, lastY = 0;
+    const options = { signal: this.dragEvents.signal };
     window.addEventListener("pointerdown", (e) => {
       const t = e.target as Element | null;
       if (t && t.closest("button, input, a, .form, .results, .opt")) return;
-      dragging = true; lastX = e.clientX; lastY = e.clientY; this.dragVel = 0;
-    });
+      this.dragging = true; lastX = e.clientX; lastY = e.clientY; this.dragVel = 0;
+    }, options);
     window.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
+      if (!this.dragging) return;
       const dx = e.clientX - lastX, dy = e.clientY - lastY; lastX = e.clientX; lastY = e.clientY;
-      this.angle += dx * 0.008; this.dragVel = dx * 0.008;
+      this.angle += dx * 0.008;
+      // En el busto, soltar conserva el ángulo elegido sin un giro adicional.
+      this.dragVel = this.state.stage === 1 ? 0 : dx * 0.008;
       this.tilt = Math.max(-1.3, Math.min(1.3, this.tilt + dy * 0.006));
       this.userUntil = performance.now() + 6000;
-    });
-    window.addEventListener("pointerup", () => { dragging = false; });
-    window.addEventListener("pointercancel", () => { dragging = false; });
+    }, options);
+    window.addEventListener("pointerup", () => { this.dragging = false; }, options);
+    window.addEventListener("pointercancel", () => { this.dragging = false; }, options);
   }
 
   /** Proyecta un punto del mundo a píxeles CSS del host. */
-  project(p: Vec3): [number, number, boolean] {
-    const m = this.vp;
+  project(p: Vec3, m: M4 = this.vp): [number, number, boolean] {
     const x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
     const y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
     const w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
@@ -241,7 +261,7 @@ export class Engine {
     // Rotación: automática, salvo en barras (se encara a cámara)
     const userDriving = now < this.userUntil;
     if (userDriving) {
-      this.angle += this.dragVel; // inercia tras soltar el dedo
+      if (!this.dragging) this.angle += this.dragVel; // inercia solo tras soltar
     } else if (st.lockAngle !== null) {
       const base = st.lockAngle;
       // Equivalente más cercano al ángulo actual, para no dar la vuelta larga.
@@ -285,7 +305,11 @@ export class Engine {
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    // Cruce breve con las partículas al llegar/salir del busto; las otras poses siguen intactas.
+    const surfaceT = Math.max(0, 1 - Math.abs(this.stageCur - 1) / 0.08);
+    const surfaceAlpha = surfaceT * surfaceT * (3 - 2 * surfaceT);
     gl.useProgram(this.prog);
+    gl.uniform1f(this.U.u_surface, surfaceAlpha);
     gl.uniformMatrix4fv(this.U.u_vp, false, this.vp);
     gl.uniform1f(this.U.u_stage, this.stageCur);
     gl.uniform1f(this.U.u_time, t);
@@ -298,10 +322,36 @@ export class Engine {
     gl.drawArrays(gl.POINTS, 0, N);
     gl.bindVertexArray(null);
 
-    // Etiquetas HTML ancladas a puntos del mundo
+    if (surfaceAlpha > 0) {
+      // Primera pasada sin color: profundidad cerrada, incluidos los huecos entre puntos.
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.useProgram(this.bustProg);
+      gl.bindVertexArray(this.bustVao);
+      gl.uniformMatrix4fv(this.US.u_vp, false, this.vp);
+      gl.uniformMatrix4fv(this.US.u_view, false, view);
+      gl.uniform1i(this.US.u_depthOnly, 1);
+      gl.colorMask(false, false, false, false);
+      gl.drawArrays(gl.TRIANGLES, 0, this.bustCount);
+      gl.colorMask(true, true, true, true);
+      gl.uniform1i(this.US.u_depthOnly, 0);
+      gl.uniform1f(this.US.u_spacing, Math.max(2, BUST_STEP * modelScale * this.canvas.height / this.viewH));
+      gl.uniform1f(this.US.u_alpha, surfaceAlpha * this.dimCur);
+      gl.uniform2f(this.US.u_origin, this.canvas.width / 2, this.canvas.height * (0.5 + yOff / this.viewH));
+      gl.uniform3fv(this.US.u_orange, ORANGE);
+      gl.uniform3fv(this.US.u_ink, INK);
+      gl.depthMask(false);
+      gl.drawArrays(gl.TRIANGLES, 0, this.bustCount);
+      gl.depthMask(true);
+      gl.bindVertexArray(null);
+    }
+
+    // En el busto las etiquetas conservan los laterales y no ocultan el rostro al girar.
+    const labelVp = st.stage === 1
+      ? mul(this.proj, mul(translate(0, yOff, -this.dist), mul(scale(modelScale), rotY(-Math.PI / 2))))
+      : this.vp;
     for (const l of st.labels) {
       if (!l.el) continue;
-      const [x, y, ok] = this.project(l.pos);
+      const [x, y, ok] = this.project(l.pos, labelVp);
       l.el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
       l.el.style.opacity = ok ? "" : "0";
     }
@@ -309,6 +359,7 @@ export class Engine {
 
   destroy() {
     cancelAnimationFrame(this.raf);
+    this.dragEvents.abort();
     this.ro.disconnect();
     this.gl.getExtension("WEBGL_lose_context")?.loseContext();
     this.canvas.remove();

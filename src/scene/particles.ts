@@ -50,9 +50,8 @@ export interface ParticleData {
 }
 
 /**
- * Busto 3D como retícula de puntos. Volumen = intersección de dos siluetas extruidas
- * (perfil, visto de lado, y frontal). Se muestrea en una retícula regular y se conservan
- * las celdas de la superficie, así se ve como el busto punteado del deck desde cualquier ángulo.
+ * El perfil fija la profundidad y el frontal fija el ancho de secciones redondeadas.
+ * La misma superficie se usa para las partículas de transición y el busto punteado.
  */
 const MW = 132, MH = 180, PX = 68; // px de máscara por unidad de mundo
 function mask(draw: (g: CanvasRenderingContext2D) => void): Uint8Array | null {
@@ -99,18 +98,87 @@ const PROFILE = mask((g) => {
 });
 // Frontal: cabeza ovalada, cuello y hombros.
 const FRONT = mask((g) => {
-  g.beginPath(); g.ellipse(66, 58, 38, 50, 0, 0, Math.PI * 2); g.fill();
-  g.fillRect(47, 94, 38, 42);
-  g.beginPath(); g.moveTo(6, 180); g.lineTo(6, 168);
-  g.bezierCurveTo(8, 148, 35, 139, 47, 130); g.lineTo(85, 130);
-  g.bezierCurveTo(97, 139, 124, 148, 126, 168); g.lineTo(126, 180); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(66, 8);
+  g.bezierCurveTo(38, 8, 29, 26, 29, 49);
+  g.bezierCurveTo(28, 69, 34, 87, 45, 98);
+  g.bezierCurveTo(49, 103, 49, 115, 47, 123);
+  g.bezierCurveTo(44, 134, 20, 136, 10, 154);
+  g.quadraticCurveTo(6, 165, 6, 180);
+  g.lineTo(126, 180);
+  g.quadraticCurveTo(126, 165, 122, 154);
+  g.bezierCurveTo(112, 136, 88, 134, 85, 123);
+  g.bezierCurveTo(83, 115, 83, 103, 87, 98);
+  g.bezierCurveTo(98, 87, 104, 69, 103, 49);
+  g.bezierCurveTo(103, 26, 94, 8, 66, 8);
+  g.closePath(); g.fill();
 });
+
+type Section = { back: number; front: number; width: number };
+const SECTIONS: (Section | null)[] = Array.from({ length: MH }, (_, row) => {
+  if (!PROFILE || !FRONT) return null;
+  const bounds = (m: Uint8Array) => {
+    let lo = MW, hi = -1;
+    for (let col = 0; col < MW; col++) if (m[row * MW + col]) { lo = Math.min(lo, col); hi = col; }
+    return [lo, hi];
+  };
+  const [back, front] = bounds(PROFILE), [left, right] = bounds(FRONT);
+  if (front < back || right < left) return null;
+  return { back: (back - MW / 2) / PX, front: (front - MW / 2) / PX, width: (right - left + 1) / (2 * PX) };
+});
+
+function sectionAt(row: number): Section | null {
+  const a = SECTIONS[Math.max(0, Math.min(MH - 1, Math.floor(row)))];
+  const b = SECTIONS[Math.max(0, Math.min(MH - 1, Math.ceil(row)))];
+  if (!a || !b) return a || b;
+  const f = row - Math.floor(row);
+  return { back: a.back + (b.back - a.back) * f, front: a.front + (b.front - a.front) * f, width: a.width + (b.width - a.width) * f };
+}
+
+/** Secciones elípticas, con nariz estrecha y cuencas suaves; x=0 conserva el perfil. */
+function surfaceDepth(s: Section, row: number, x: number): [number, number] {
+  const u = Math.min(1, Math.abs(x) / s.width);
+  const round = Math.sqrt(Math.max(0, 1 - u * u));
+  const center = (s.front + s.back) / 2, radius = (s.front - s.back) / 2;
+  const gauss = (v: number) => Math.exp(-v * v);
+  const nose = 0.18 * gauss((row - 74) / 11) * (1 - gauss(x / 0.115));
+  const eyes = 0.055 * gauss((row - 60) / 5) * (gauss((Math.abs(x) - 0.22) / 0.085) - gauss(0.22 / 0.085));
+  return [center - radius * round, center + (radius - nose - eyes) * round];
+}
+
 function insideBust(x: number, y: number, z: number): boolean {
-  if (!PROFILE || !FRONT) return false;
-  const py = Math.round(98 - y * PX);
-  const pz = Math.round(MW / 2 + z * PX), px = Math.round(MW / 2 + x * PX);
-  if (py < 0 || py >= MH || pz < 0 || pz >= MW || px < 0 || px >= MW) return false;
-  return PROFILE[py * MW + pz] === 1 && FRONT[py * MW + px] === 1;
+  const row = 98 - y * PX;
+  if (row < 0 || row >= MH) return false;
+  const s = sectionAt(row);
+  if (!s || Math.abs(x) > s.width) return false;
+  const [back, front] = surfaceDepth(s, row, x);
+  return z >= back && z <= front;
+}
+
+/** Malla cerrada para resolver la visibilidad antes de dibujar los puntos. */
+export function buildBustSurface(): Float32Array {
+  const rows = SECTIONS.flatMap((s, row) => s ? [row] : []);
+  if (!rows.length) return new Float32Array();
+  const segments = 96, vertices: number[] = [];
+  const point = (row: number, angle: number): [number, number, number] => {
+    const s = sectionAt(row)!;
+    const x = s.width * Math.sin(angle);
+    const depths = surfaceDepth(s, row, x);
+    return [x, (98 - row) / PX + 0.1, depths[Math.cos(angle) >= 0 ? 1 : 0]];
+  };
+  const triangle = (a: number[], b: number[], c: number[]) => vertices.push(...a, ...b, ...c);
+  for (let r = 0; r < rows.length - 1; r++) for (let j = 0; j < segments; j++) {
+    const a = point(rows[r], j * 2 * Math.PI / segments);
+    const b = point(rows[r], (j + 1) * 2 * Math.PI / segments);
+    const c = point(rows[r + 1], j * 2 * Math.PI / segments);
+    const d = point(rows[r + 1], (j + 1) * 2 * Math.PI / segments);
+    triangle(a, b, c); triangle(b, d, c);
+  }
+  for (const row of [rows[0], rows[rows.length - 1]]) {
+    const s = sectionAt(row)!;
+    const center = [0, (98 - row) / PX + 0.1, (s.back + s.front) / 2];
+    for (let j = 0; j < segments; j++) triangle(center, point(row, j * 2 * Math.PI / segments), point(row, (j + 1) * 2 * Math.PI / segments));
+  }
+  return new Float32Array(vertices);
 }
 type Cell = { x: number; y: number; z: number; head: boolean };
 /** Retícula regular; el paso se elige para que toda la superficie quepa en N partículas (sin huecos). */
