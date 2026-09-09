@@ -38,6 +38,10 @@ Entrada más reciente arriba. Cada sesión: qué se hizo, qué se decidió, qué
 - **Railway**: `railway.json`, `nixpacks.toml` y `DEPLOY.md`. SQLite en un volumen en
   `/data`, `prisma migrate deploy` al arrancar, healthcheck en `/api/aggregate`. Probado
   en local: `migrate deploy` sobre base vacía y `npm run build` pasan.
+- **Fallo de build en Railway corregido**: `prisma.config.ts` usaba `env("DATABASE_URL")`,
+  que lanza error si la variable no existe, y en el build (`npm ci` → `prisma generate`)
+  aún no estaba definida. Ahora usa `process.env.DATABASE_URL ?? "file:./prisma/dev.db"`.
+  El aviso `UndefinedVar: $NIXPACKS_PATH` del log es inofensivo.
 - **Fondo**: crema liso `#FBFAF7`, sin degradados de color, sin anillos y sin líneas
   conectoras (Angel los descartó: «elementos raritos»). Se eliminó `Conectores.tsx`.
 
